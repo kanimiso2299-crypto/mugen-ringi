@@ -3,25 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>無限稟議 - MUGEN RINGI</title>
-    <!-- 巨大数を扱うライブラリ「Break_infinity.js」をネットから読み込む -->
+    <title>無限稟議 - MUGEN RINGI (Ver.2.0)</title>
     <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
     
     <style>
-        /* --- デザインの設定（CSS） --- */
+        /* --- デザイン (CSS) --- */
         body {
-            font-family: "MS Mincho", "Hiragino Mincho ProN", serif; /* 事務的なフォント */
-            background-color: #f0f2f5; /* オフィスの壁紙っぽいグレー */
+            font-family: "MS Mincho", "Hiragino Mincho ProN", serif;
+            background-color: #f0f2f5;
             color: #333;
             margin: 0;
             padding: 20px;
             display: flex;
             height: 100vh;
             box-sizing: border-box;
-            overflow: hidden; /* 画面スクロール禁止 */
+            overflow: hidden;
         }
 
-        /* 左側：作業エリア */
+        /* 左エリア */
         #work-area {
             flex: 1;
             display: flex;
@@ -32,25 +31,51 @@
             padding-right: 20px;
         }
 
-        /* 右側：設備エリア */
-        #upgrade-area {
+        /* 右エリア */
+        #right-panel {
             flex: 1;
             padding-left: 20px;
-            overflow-y: auto; /* 施設が増えたらスクロール */
+            display: flex;
+            flex-direction: column;
             background-color: #fff;
             border-left: 1px solid #ddd;
         }
 
+        /* タブメニュー */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 10px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            cursor: pointer;
+            background: #eee;
+            border: none;
+            font-weight: bold;
+            color: #666;
+        }
+        .tab-btn.active {
+            background: #fff;
+            color: #bf0000;
+            border-bottom: 2px solid #bf0000;
+        }
+
+        /* スクロールエリア */
+        .scroll-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
         h1 { margin: 0; font-size: 24px; color: #444; }
-        
-        /* メインの数字表示 */
         #counter {
             font-size: 60px;
             font-weight: bold;
             margin: 20px 0;
-            font-family: 'Courier New', monospace; /* デジタル数字っぽく */
+            font-family: 'Courier New', monospace;
         }
-
         #cps-display { font-size: 18px; color: #666; margin-bottom: 40px;}
 
         /* ハンコボタン */
@@ -58,7 +83,7 @@
             width: 200px;
             height: 200px;
             border-radius: 50%;
-            border: 10px solid #bf0000; /* 朱肉の色 */
+            border: 10px solid #bf0000;
             background-color: #fff;
             color: #bf0000;
             font-size: 32px;
@@ -70,49 +95,42 @@
             align-items: center;
             justify-content: center;
             flex-direction: column;
+            user-select: none; /* 連打時の選択防止 */
         }
-        
-        #stamp-btn:active {
-            transform: scale(0.95); /* 押したときに縮む */
-            background-color: #ffe6e6;
-        }
+        #stamp-btn:active { transform: scale(0.95); background-color: #ffe6e6; }
 
-        /* 施設リストのデザイン */
-        .facility {
+        /* リストアイテム共通 */
+        .item-box {
             border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 10px;
+            padding: 10px;
+            margin-bottom: 8px;
             border-radius: 4px;
             background-color: #f9f9f9;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: background-color 0.2s;
         }
-        
-        .facility:hover { background-color: #eef; }
-        .facility.locked { opacity: 0.6; pointer-events: none; } /* お金が足りない時 */
+        .item-box:hover { background-color: #eef; }
+        .item-box.bought { background-color: #dff0d8; opacity: 0.7; } /* 購入済み */
 
-        .facility-info h3 { margin: 0 0 5px 0; font-size: 18px; }
-        .facility-info p { margin: 0; font-size: 14px; color: #555; }
+        .item-info h3 { margin: 0 0 3px 0; font-size: 16px; }
+        .item-info p { margin: 0; font-size: 12px; color: #555; }
         
         .buy-btn {
             background-color: #4CAF50;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            min-width: 120px;
+            min-width: 100px;
+            font-size: 12px;
         }
-        
-        .buy-btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
+        .buy-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .buy-btn.bought-btn { background-color: transparent; color: #4CAF50; box-shadow: none; cursor: default; }
 
-        /* 演出用：クリック時の浮かぶ数字 */
+        /* 演出 */
         .click-effect {
             position: absolute;
             color: #bf0000;
@@ -121,7 +139,6 @@
             pointer-events: none;
             animation: floatUp 1s forwards;
         }
-
         @keyframes floatUp {
             0% { opacity: 1; transform: translateY(0); }
             100% { opacity: 0; transform: translateY(-50px); }
@@ -130,7 +147,7 @@
 </head>
 <body>
 
-    <!-- 左側：ハンコを押す場所 -->
+    <!-- 左側：作業エリア -->
     <div id="work-area">
         <h1>【 未処理書類 】</h1>
         <div id="counter">0</div>
@@ -142,28 +159,42 @@
         </button>
         
         <div style="margin-top:50px; font-size:12px; color:#999;">
-            ※データは自動保存されます
-            <br>
-            <button onclick="resetGame()" style="margin-top:10px;">辞表提出(データリセット)</button>
+            ※自動保存中<br>
+            <button onclick="resetGame()" style="margin-top:10px;">データリセット</button>
         </div>
     </div>
 
-    <!-- 右側：人材・設備リスト -->
-    <div id="upgrade-area">
-        <h2>稟議・決裁ルート構築</h2>
-        <div id="facilities-container">
-            <!-- JavaScriptでここに施設が生成されます -->
+    <!-- 右側：パネルエリア -->
+    <div id="right-panel">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('facilities')">人材・設備</button>
+            <button class="tab-btn" onclick="switchTab('upgrades')">業務改善</button>
+        </div>
+
+        <!-- 施設リスト -->
+        <div id="facilities-tab" class="scroll-content">
+            <div id="facilities-container"></div>
+        </div>
+
+        <!-- アップグレードリスト（最初は空っぽ） -->
+        <div id="upgrades-tab" class="scroll-content" style="display:none;">
+            <div id="upgrades-container">
+                <p style="padding:10px; color:#999; font-size:12px;">
+                    ※特定の条件を満たすと改善案（アップグレード）が表示されます。
+                </p>
+            </div>
         </div>
     </div>
 
     <script>
-        /* --- ゲームのロジック（JavaScript） --- */
-        
+        /* --- JavaScript (Ver 2.0) --- */
         const D = Decimal;
 
-        // ゲームデータの初期値
+        // ゲームデータ初期定義
         let game = {
             paper: new D(0),
+            startTime: Date.now(),
+            // 施設データ
             facilities: [
                 { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, owned: 0, desc: "スマホ片手に作業します。" },
                 { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, owned: 0, desc: "ガシャンガシャン。" },
@@ -172,94 +203,240 @@
                 { id: 4, name: "承認AI Type-0", baseCost: 130000, baseProd: 350, owned: 0, desc: "空気を読んで承認します。" },
                 { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, owned: 0, desc: "バイオ技術で書類を栽培。" },
             ],
-            startTime: Date.now() // セーブ用ではなく、開始時間記録用
+            // アップグレードデータ（purchasedがtrueなら購入済み）
+            upgrades: [
+                // 施設0: アルバイト用
+                { id: "u0_1", name: "エルゴノミクス椅子", cost: 1000, targetId: 0, scale: 2, purchased: false, req: 10, desc: "腰痛軽減。アルバイトの効率2倍。" },
+                { id: "u0_2", name: "エナジードリンク", cost: 50000, targetId: 0, scale: 2, purchased: false, req: 50, desc: "カフェイン注入。アルバイトの効率さらに2倍。" },
+                
+                // 施設1: 自動捺印機用
+                { id: "u1_1", name: "工業用潤滑油", cost: 10000, targetId: 1, scale: 2, purchased: false, req: 10, desc: "摩擦ゼロ。捺印機の効率2倍。" },
+                { id: "u1_2", name: "予備バッテリー", cost: 500000, targetId: 1, scale: 2, purchased: false, req: 50, desc: "24時間稼働。捺印機の効率さらに2倍。" },
+
+                // 施設2: ベテラン社員用
+                { id: "u2_1", name: "腱鞘炎ガード", cost: 100000, targetId: 2, scale: 2, purchased: false, req: 10, desc: "手首を保護。ベテランの効率2倍。" },
+                
+                // クリック強化（targetId: -1 とする）
+                { id: "click_1", name: "重厚なハンコ", cost: 500, targetId: -1, scale: 10, purchased: false, req: 1, desc: "クリック効率がアップ。" },
+            ]
         };
 
-        // アニメーション用の時間管理変数
         let lastFrameTime = Date.now(); 
 
-        // ロード処理
+        /* --- システム関数 --- */
+
         function loadGame() {
             const saved = localStorage.getItem("mugenRingiSave");
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    // 数字データをDecimal型に復元
                     game.paper = new D(parsed.paper);
+                    
+                    // 施設の復元
                     game.facilities.forEach((f, i) => {
-                        if (parsed.facilities[i]) {
+                        if (parsed.facilities && parsed.facilities[i]) {
                             f.owned = parsed.facilities[i].owned;
                         }
                     });
-                } catch (e) {
-                    console.error("セーブデータの読み込みに失敗しました", e);
-                }
+
+                    // アップグレードの復元（Ver1.0からの移行でもエラーにならないように）
+                    if(parsed.upgrades) {
+                        game.upgrades.forEach(u => {
+                            const savedUp = parsed.upgrades.find(su => su.id === u.id);
+                            if(savedUp) u.purchased = savedUp.purchased;
+                        });
+                    }
+                } catch (e) { console.error("Load Error", e); }
             }
-            createFacilityUI();
             
-            // ゲームループ開始前に時間をリセット（意図しない大量加算を防ぐ）
+            // UI生成
+            createFacilityUI();
+            createUpgradeUI(); // アップグレード画面も作る
+
             lastFrameTime = Date.now();
             requestAnimationFrame(gameLoop);
         }
 
-        // 画面（UI）の生成
+        // 施設の表示更新
         function createFacilityUI() {
             const container = document.getElementById("facilities-container");
             container.innerHTML = ""; 
 
             game.facilities.forEach((f, index) => {
                 const div = document.createElement("div");
-                div.className = "facility";
-                div.id = `fac-${index}`;
+                div.className = "item-box facility";
                 div.innerHTML = `
-                    <div class="facility-info">
+                    <div class="item-info">
                         <h3>${f.name}</h3>
                         <p>${f.desc}</p>
                         <p>所持: <span id="owned-${index}" style="font-weight:bold;">0</span></p>
-                        <p>生産: +${f.baseProd}/秒</p>
+                        <p>生産: <span id="prod-${index}">0</span>/秒</p>
                     </div>
                     <button class="buy-btn" id="btn-${index}" onclick="buyFacility(${index})">
-                        雇用<br>
-                        <span id="cost-${index}">0</span>枚
+                        雇用 <span id="cost-${index}">0</span>
                     </button>
                 `;
                 container.appendChild(div);
             });
         }
 
-        // クリック時の処理
-        function clickStamp(event) {
-            const clickPower = new D(1);
-            game.paper = game.paper.plus(clickPower);
-            spawnFloatingText(event, "+" + formatNumber(clickPower));
-            updateDisplay();
+        // アップグレードの表示更新（毎フレーム作り直さず、表示/非表示だけ切り替えるのが理想だが、今回は簡易的に全描画）
+        function createUpgradeUI() {
+            const container = document.getElementById("upgrades-container");
+            // ヘッダー以外をクリア
+            container.innerHTML = `<p style="padding:5px; color:#999; font-size:12px;">条件を満たすと出現します</p>`;
+
+            game.upgrades.forEach((u, index) => {
+                const div = document.createElement("div");
+                div.className = "item-box";
+                div.id = `upg-box-${index}`;
+                div.style.display = "none"; // 最初は隠す
+
+                // ボタンの状態
+                let btnHtml = "";
+                if(u.purchased) {
+                    div.classList.add("bought");
+                    btnHtml = `<button class="buy-btn bought-btn" disabled>済</button>`;
+                } else {
+                    btnHtml = `<button class="buy-btn" id="upg-btn-${index}" onclick="buyUpgrade(${index})">購入 ${u.cost}</button>`;
+                }
+
+                div.innerHTML = `
+                    <div class="item-info">
+                        <h3>${u.name}</h3>
+                        <p>${u.desc}</p>
+                    </div>
+                    ${btnHtml}
+                `;
+                container.appendChild(div);
+            });
         }
 
-        // 施設購入処理
+        /* --- メインループ --- */
+        function gameLoop() {
+            const now = Date.now();
+            const dt = (now - lastFrameTime) / 1000; 
+            lastFrameTime = now;
+
+            // 1. 現在の生産倍率を計算（アップグレード反映）
+            // 施設ごとの倍率マップを作る
+            let multipliers = {}; 
+            game.facilities.forEach(f => multipliers[f.id] = 1);
+
+            game.upgrades.forEach(u => {
+                if(u.purchased && u.targetId >= 0) {
+                    multipliers[u.targetId] *= u.scale;
+                }
+            });
+
+            // 2. 秒間生産量 (CPS) 計算
+            let cps = new D(0);
+            game.facilities.forEach(f => {
+                let perSec = new D(f.baseProd).times(multipliers[f.id]);
+                cps = cps.plus(perSec.times(f.owned));
+                
+                // UIの生産量表示も更新
+                let uiProd = document.getElementById(`prod-${f.id}`);
+                if(uiProd) uiProd.innerText = formatNumber(perSec.times(f.owned));
+            });
+
+            // 3. 加算
+            if (dt > 0) game.paper = game.paper.plus(cps.times(dt));
+
+            // 4. UI更新
+            document.getElementById("counter").innerText = formatNumber(game.paper);
+            document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
+
+            // 施設のボタン更新
+            game.facilities.forEach((f, i) => {
+                const cost = getCost(f);
+                const btn = document.getElementById(`btn-${i}`);
+                document.getElementById(`owned-${i}`).innerText = f.owned;
+                document.getElementById(`cost-${i}`).innerText = formatNumber(cost);
+                btn.disabled = game.paper.lt(cost);
+            });
+
+            // アップグレードの表示制御 & ボタン更新
+            game.upgrades.forEach((u, i) => {
+                const box = document.getElementById(`upg-box-${i}`);
+                const btn = document.getElementById(`upg-btn-${i}`);
+                
+                // 出現条件チェック（未購入かつ、対象施設を規定数持っているか）
+                let isVisible = u.purchased;
+                if(!isVisible && u.targetId >= 0) {
+                    // 施設強化の場合
+                    if(game.facilities[u.targetId].owned >= u.req) isVisible = true;
+                } else if(!isVisible && u.targetId === -1) {
+                    // クリック強化などは最初から、あるいは枚数条件などで出す（今回は常にtrue）
+                    isVisible = true;
+                }
+
+                if(isVisible) {
+                    box.style.display = "flex";
+                    if(btn && !u.purchased) {
+                        btn.disabled = game.paper.lt(u.cost);
+                    }
+                }
+            });
+
+            if (Math.random() < 0.02) saveGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        /* --- アクション関数 --- */
+
+        function clickStamp(event) {
+            // クリック強化の反映
+            let clickPower = new D(1);
+            // 重厚なハンコ(id: click_1)を持ってたら強化
+            // ※もっとスマートな実装があるが今回は簡易的に検索
+            const upg = game.upgrades.find(u => u.id === "click_1");
+            if(upg && upg.purchased) clickPower = clickPower.times(upg.scale);
+
+            game.paper = game.paper.plus(clickPower);
+            spawnFloatingText(event, "+" + formatNumber(clickPower));
+        }
+
         function buyFacility(index) {
             const f = game.facilities[index];
             const cost = getCost(f);
-            
             if (game.paper.gte(cost)) {
                 game.paper = game.paper.minus(cost);
                 f.owned++;
-                updateDisplay();
             }
         }
 
-        // 価格計算
+        function buyUpgrade(index) {
+            const u = game.upgrades[index];
+            if (!u.purchased && game.paper.gte(u.cost)) {
+                game.paper = game.paper.minus(u.cost);
+                u.purchased = true;
+                createUpgradeUI(); // 済ボタンに変えるため再描画
+            }
+        }
+
+        function switchTab(tabName) {
+            // タブ切り替え処理
+            document.getElementById("facilities-tab").style.display = (tabName === 'facilities') ? 'block' : 'none';
+            document.getElementById("upgrades-tab").style.display = (tabName === 'upgrades') ? 'block' : 'none';
+            
+            // ボタンの色変え
+            const btns = document.querySelectorAll('.tab-btn');
+            btns[0].className = (tabName === 'facilities') ? 'tab-btn active' : 'tab-btn';
+            btns[1].className = (tabName === 'upgrades') ? 'tab-btn active' : 'tab-btn';
+        }
+
+        /* --- ユーティリティ --- */
         function getCost(facility) {
             return new D(facility.baseCost).times(new D(1.15).pow(facility.owned));
         }
 
-        // 数字の整形
         function formatNumber(n) {
             n = new D(n);
             if (n.lt(1000)) return n.floor().toString();
             return n.mantissa.toFixed(2) + "e" + n.exponent;
         }
 
-        // 演出
         function spawnFloatingText(e, text) {
             const el = document.createElement("div");
             el.className = "click-effect";
@@ -277,74 +454,23 @@
             setTimeout(() => el.remove(), 1000);
         }
 
-        // ★修正したメインループ★
-        function gameLoop() {
-            const now = Date.now();
-            // 経過時間（秒）を計算。ここが重要です。
-            const dt = (now - lastFrameTime) / 1000; 
-            lastFrameTime = now;
-
-            // 生産計算
-            let cps = new D(0);
-            game.facilities.forEach(f => {
-                cps = cps.plus(new D(f.baseProd).times(f.owned));
-            });
-
-            if (dt > 0) {
-                // ★修正箇所：dt/10 を dt に変更しました
-                // これで「毎秒生産量 × 経過秒数」が正しく加算されます
-                game.paper = game.paper.plus(cps.times(dt)); 
-            }
-
-            // 画面更新
-            document.getElementById("counter").innerText = formatNumber(game.paper);
-            document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
-
-            // ボタン制御
-            game.facilities.forEach((f, i) => {
-                const cost = getCost(f);
-                const btn = document.getElementById(`btn-${i}`);
-                document.getElementById(`owned-${i}`).innerText = f.owned;
-                document.getElementById(`cost-${i}`).innerText = formatNumber(cost);
-                
-                if (game.paper.gte(cost)) {
-                    btn.disabled = false;
-                } else {
-                    btn.disabled = true;
-                }
-            });
-
-            // オートセーブ（頻度調整済み）
-            if (Math.random() < 0.01) { // 頻度を下げました
-                saveGame();
-            }
-
-            requestAnimationFrame(gameLoop);
-        }
-
         function saveGame() {
             const saveObj = {
                 paper: game.paper.toString(),
-                facilities: game.facilities.map(f => ({ owned: f.owned }))
+                facilities: game.facilities.map(f => ({ owned: f.owned })),
+                upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased }))
             };
             localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
         }
 
-        // リセット時に画面も更新するように修正
         function resetGame() {
-            if(confirm("本当に辞表を出しますか？（データが消えます）")) {
+            if(confirm("辞表を出しますか？（データが完全に消えます）")) {
                 localStorage.removeItem("mugenRingiSave");
                 location.reload();
             }
         }
-        
-        // 画面更新用ショートカット
-        function updateDisplay() {
-            // ループ外で単発更新したいとき用（今はクリック時に使用）
-            document.getElementById("counter").innerText = formatNumber(game.paper);
-        }
 
-        // ゲーム起動
+        // 起動
         loadGame();
 
     </script>
