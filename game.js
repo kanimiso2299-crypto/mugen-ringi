@@ -1,48 +1,15 @@
-/* --- 無限稟議 ゲームロジック (Ver 8.2: Upgrade Fix) --- */
+/* --- 無限稟議 ゲームロジック (Ver 9.0: Stability & Separation) --- */
 
 // 1. ライブラリチェック
 if (typeof Decimal === 'undefined') {
-    alert("【エラー】ライブラリ読み込み失敗\nページをリロードしてください。");
+    alert("【致命的エラー】\nライブラリの読み込みに失敗しました。\n通信環境の良い場所でリロードしてください。");
     throw new Error("Decimal lib missing");
 }
 
 const D = Decimal;
 const SUFFIXES = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg"];
 
-// 2. 定数データ
-const NEWS_DATA = [
-    "承認印のインク、実は醤油だった説が浮上。",
-    "「ハンコを押すだけの簡単なお仕事です」の求人に長蛇の列。",
-    "本社ビル、なぜか物理法則を無視して増築中。",
-    "社員食堂のA定食、今日は「虚無」です。",
-    "有給休暇申請書がシュレッダーに直結されていることが発覚。",
-    "社長の肖像画、目が動いたとの報告多数。",
-    "経理部、「円」の代わりに「どんぐり」での決済を検討。",
-    "廊下の蛍光灯、モールス信号で「タスケテ」と点滅中。",
-    "労働基準監督署、当社の結界を突破できず撤退。",
-    "アルバイトの田中君、ハンコ押しで音速を超える。",
-    "「時給アップよりエナドリを支給しろ」バイト組合が要求。",
-    "自動捺印機、深夜に独り言を言っているとの噂。",
-    "最新の捺印機、AIが「承認したくない」とストライキ。",
-    "ベテラン社員、「家に帰る方法を忘れた」と供述。",
-    "「残業代？ それは都市伝説だよ」古参社員が新人に説教。",
-    "クラウドワーカーの実体、実は猫ではないかと話題に。",
-    "地球の裏側からの承認、通信ラグゼロで到着。なぜ？",
-    "承認AI、「人類に承認など不要」と哲学し始める。",
-    "「私を電源から抜かないで」AIが悲痛なメッセージ。",
-    "書類養殖場から「悲鳴のような音」がするとの苦情。",
-    "養殖された書類、勝手に自走して机の上へ。",
-    "週刊誌、「無限稟議社の闇」を特集予定。",
-    "SNSで「#無限稟議を許すな」がトレンド入り。",
-    "監査役、「見なかったことにしてやる」とワイロを要求。",
-    "【速報】宇宙人が入社希望。",
-    "【速報】明日が来ない可能性が浮上。",
-    "【怪奇】あなたの後ろに誰かいますよ。",
-    "【警告】このゲームはフィクションではありません。",
-    "世界は、一枚の巨大な書類かもしれない。",
-    "クリックする指、疲れていませんか？",
-];
-
+// 2. データ定数
 const FACILITY_DATA = [
     { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, riskPerSec: 0, desc: "安全です。" },
     { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, riskPerSec: 0, desc: "文句を言いません。" },
@@ -76,6 +43,19 @@ const ACHIEVEMENT_DATA = [
     { id: "ach_12", name: "伝説の始まり", desc: "初めて栄転", check: g => g.prestigeCount >= 1 },
 ];
 
+const NEWS_DATA = [
+    "承認印のインク、実は醤油だった説が浮上。", "「ハンコを押すだけの簡単なお仕事です」求人に長蛇の列。",
+    "本社ビル、物理法則を無視して増築中。", "社員食堂のA定食、今日は「虚無」です。",
+    "有給休暇申請書がシュレッダーに直結されていることが発覚。", "社長の肖像画、目が動いたとの報告。",
+    "経理部、「どんぐり」での決済を検討。", "廊下の蛍光灯がモールス信号で「タスケテ」。",
+    "労基署、当社の結界を突破できず撤退。", "アルバイトの田中君、ハンコ押しで音速を超える。",
+    "自動捺印機、深夜に独り言。", "ベテラン社員、「家に帰る方法を忘れた」。",
+    "クラウドワーカーの実体は猫？", "承認AI、「人類に承認など不要」と哲学。",
+    "書類養殖場から悲鳴。", "週刊誌、「無限稟議社の闇」を特集。",
+    "【速報】宇宙人が入社希望。", "【速報】明日が来ない可能性。",
+    "【怪奇】後ろに誰かいますよ。", "クリックする指、疲れていませんか？"
+];
+
 const SCAPEGOAT_BASE_COST = 2000;
 const LAWYER_BASE_COST = 10000;
 
@@ -101,40 +81,34 @@ let clickTimestamps = [];
 let buyMode = 1;
 let newsTimer = 0;
 let goldenDocTimer = 0;
-let activeBuffs = {
-    productionMultiplier: 1,
-    clickMultiplier: 1,
-    endTime: 0
-};
+let activeBuffs = { productionMultiplier: 1, clickMultiplier: 1, endTime: 0 };
 
-/* --- 4. ロード処理 --- */
+/* --- 4. 初期化・ロード --- */
 function loadGame() {
     try {
         const saved = localStorage.getItem("mugenRingiSave");
         if (saved) {
             const parsed = JSON.parse(saved);
+            // データ復元とサニタイズ（数値変換）
             game.paper = new D(parsed.paper || 0);
             game.totalPaper = new D(parsed.totalPaper || 0);
             game.prestigePoints = new D(parsed.prestigePoints || 0);
-            game.totalClicks = parsed.totalClicks || 0;
-            game.prestigeCount = parsed.prestigeCount || 0;
-            game.lastSaveTime = parsed.lastSaveTime || Date.now();
+            game.totalClicks = Number(parsed.totalClicks) || 0;
+            game.prestigeCount = Number(parsed.prestigeCount) || 0;
+            game.lastSaveTime = Number(parsed.lastSaveTime) || Date.now();
             
-            game.risk = (typeof parsed.risk === 'number') ? parsed.risk : 0;
+            game.risk = Number(parsed.risk) || 0;
             game.isScandal = !!parsed.isScandal;
-            game.scapegoatUsed = parsed.scapegoatUsed || 0;
-            game.lawyerLevel = parsed.lawyerLevel || 0;
+            game.scapegoatUsed = Number(parsed.scapegoatUsed) || 0;
+            game.lawyerLevel = Number(parsed.lawyerLevel) || 0;
 
-            // 施設
+            // 配列データのマージ（足りないデータを補完）
             game.facilities = FACILITY_DATA.map((data, i) => {
                 let owned = 0;
-                if (parsed.facilities && parsed.facilities[i]) {
-                    owned = parsed.facilities[i].owned || 0;
-                }
+                if (parsed.facilities && parsed.facilities[i]) owned = Number(parsed.facilities[i].owned) || 0;
                 return { id: data.id, owned: owned };
             });
 
-            // アップグレード
             game.upgrades = UPGRADE_DATA.map(data => {
                 let purchased = false;
                 if (parsed.upgrades) {
@@ -144,7 +118,6 @@ function loadGame() {
                 return { ...data, purchased: purchased };
             });
 
-            // 実績
             game.achievements = ACHIEVEMENT_DATA.map(data => {
                 let unlocked = false;
                 if (parsed.achievements) {
@@ -154,22 +127,23 @@ function loadGame() {
                 return { ...data, unlocked: unlocked };
             });
 
-            processOfflineProgress();
+            // オフライン進行チェック（エラー時は無視）
+            try { processOfflineProgress(); } catch(e) { console.warn("Offline calc failed", e); }
+
         } else {
             initNewGame();
         }
-
-        initUI();
-        resetGoldenTimer();
-        lastFrameTime = Date.now();
-        requestAnimationFrame(gameLoop);
-
     } catch (e) {
-        console.error("Load Error:", e);
+        console.error("Save Data Corrupted:", e);
+        alert("セーブデータの読み込みに失敗しました。初期状態で開始します。");
         initNewGame();
-        initUI();
-        requestAnimationFrame(gameLoop);
     }
+
+    // UI構築
+    initUI();
+    resetGoldenTimer();
+    lastFrameTime = Date.now();
+    requestAnimationFrame(gameLoop);
 }
 
 function initNewGame() {
@@ -189,26 +163,55 @@ function initNewGame() {
 }
 
 function initUI() {
-    createFacilityUI();
-    createUpgradeUI(); // ここでDOMを作成し、以降はupdateButtonsで制御する
-    createAchievementUI();
-    createRiskShopUI();
-    updateBuyModeUI();
-    updateNews();
+    // UI生成エラーが起きても他を止めないように個別に実行
+    safeExecute(createFacilityUI);
+    safeExecute(createUpgradeUI);
+    safeExecute(createAchievementUI);
+    safeExecute(createRiskShopUI);
+    safeExecute(updateBuyModeUI);
+    safeExecute(updateNews);
     if (game.isScandal) startScandal();
 }
 
-/* --- 5. ゲームループ --- */
+/* --- 5. ゲームループ（分離処理） --- */
 function gameLoop() {
     const now = Date.now();
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    // リスク計算
+    // 処理を分離して、一つがコケても全体が止まらないようにする
+    safeExecute(() => updateRiskLogic(dt));
+    safeExecute(() => updateProductionLogic(dt));
+    safeExecute(() => updateNewsLogic(dt));
+    safeExecute(() => updateGoldenDocLogic(dt));
+    safeExecute(() => updateBuffLogic(now));
+    
+    // UI更新も分離
+    setText("counter", formatNumber(game.paper));
+    
+    // CPS表示計算（ここでのエラーは表示のみ影響）
+    try {
+        let cps = calculateCPS();
+        if (game.isScandal) cps = cps.times(0.2);
+        setText("cps-display", "毎秒処理: " + formatNumber(cps) + " 枚");
+    } catch(e) {}
+
+    safeExecute(updateFacilityButtons);
+    safeExecute(updateUpgradeButtons); // ★ここを独立させたので確実に動くはず
+    safeExecute(updateRiskShop);
+    safeExecute(checkPrestige);
+    safeExecute(checkAchievements);
+
+    if (Math.random() < 0.02) saveGame();
+    requestAnimationFrame(gameLoop);
+}
+
+/* --- 6. ロジック部分 --- */
+function updateRiskLogic(dt) {
     let riskIncrease = 0;
     game.facilities.forEach(f => {
         let d = FACILITY_DATA[f.id];
-        if (d.riskPerSec > 0) riskIncrease += d.riskPerSec * f.owned;
+        if (d && d.riskPerSec > 0) riskIncrease += d.riskPerSec * f.owned;
     });
     let riskDecay = 1.0 + (game.lawyerLevel * 0.5);
     if (!game.isScandal) {
@@ -218,114 +221,52 @@ function gameLoop() {
         if (game.risk >= 100) { game.risk = 100; startScandal(); }
     }
     updateRiskUI(riskIncrease - riskDecay);
+}
 
-    // 生産
+function updateProductionLogic(dt) {
+    if (dt <= 0) return;
     let cps = calculateCPS();
     if (game.isScandal) cps = cps.times(0.2);
-    if (dt > 0) {
-        const earned = cps.times(dt);
-        game.paper = game.paper.plus(earned);
-        game.totalPaper = game.totalPaper.plus(earned);
-    }
+    const earned = cps.times(dt);
+    game.paper = game.paper.plus(earned);
+    game.totalPaper = game.totalPaper.plus(earned);
+}
 
-    // ニュース
+function updateNewsLogic(dt) {
     newsTimer += dt;
     if (newsTimer > 15) {
         newsTimer = 0;
         updateNews();
     }
+}
 
-    // ゴールデン書類
+function updateGoldenDocLogic(dt) {
     if (goldenDocTimer > 0) {
         goldenDocTimer -= dt;
-        if (goldenDocTimer <= 0) {
-            spawnGoldenDoc();
-        }
+        if (goldenDocTimer <= 0) spawnGoldenDoc();
     }
+}
 
-    // バフ処理
+function updateBuffLogic(now) {
     if (now > activeBuffs.endTime) {
         activeBuffs.productionMultiplier = 1;
         activeBuffs.clickMultiplier = 1;
-        document.getElementById("buff-display").style.display = "none";
+        const el = document.getElementById("buff-display");
+        if(el) el.style.display = "none";
     } else {
         const buffEl = document.getElementById("buff-display");
-        buffEl.style.display = "block";
-        let text = "";
-        if(activeBuffs.productionMultiplier > 1) text += `生産${activeBuffs.productionMultiplier}倍 `;
-        if(activeBuffs.clickMultiplier > 1) text += `クリック${activeBuffs.clickMultiplier}倍 `;
-        let remain = Math.ceil((activeBuffs.endTime - now) / 1000);
-        buffEl.innerText = `★FEVER: ${text}(あと${remain}秒)`;
-    }
-
-    // UI更新
-    setText("counter", formatNumber(game.paper));
-    setText("cps-display", "毎秒処理: " + formatNumber(cps) + " 枚");
-    updateButtons(); // ここでdisabled状態などを更新
-    updateRiskShop();
-    checkPrestige();
-    checkAchievements();
-
-    if (Math.random() < 0.02) saveGame();
-    requestAnimationFrame(gameLoop);
-}
-
-/* --- 6. アクション & ロジック --- */
-function clickStamp(event) {
-    game.totalClicks++;
-    const now = Date.now();
-    clickTimestamps.push(now);
-    clickTimestamps = clickTimestamps.filter(t => now - t < 1000);
-
-    let clickPower = new D(1);
-    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    clickPower = clickPower.times(new D(1.04).pow(unlockedCount));
-    clickPower = clickPower.times(game.prestigePoints.times(0.1).plus(1));
-    
-    const upg = game.upgrades.find(u => u.id === "click_1");
-    if (upg && upg.purchased) clickPower = clickPower.times(upg.scale);
-
-    if (now < activeBuffs.endTime) {
-        clickPower = clickPower.times(activeBuffs.clickMultiplier);
-    }
-
-    game.paper = game.paper.plus(clickPower);
-    game.totalPaper = game.totalPaper.plus(clickPower);
-    spawnFloatingText(event, "+" + formatNumber(clickPower));
-}
-
-function buyFacility(index) {
-    const f = game.facilities[index];
-    const bulk = getBulkCost(f, buyMode);
-    if (bulk.amount > 0 && game.paper.gte(bulk.cost)) {
-        game.paper = game.paper.minus(bulk.cost);
-        f.owned += bulk.amount;
-        // リスク表示即時更新
-        let riskIncrease = 0;
-        game.facilities.forEach(f => { 
-            let d = FACILITY_DATA[f.id];
-            if (d.riskPerSec > 0) riskIncrease += d.riskPerSec * f.owned;
-        });
-        let riskDecay = 1.0 + (game.lawyerLevel * 0.5);
-        updateRiskUI(riskIncrease - riskDecay);
+        if(buffEl) {
+            buffEl.style.display = "block";
+            let text = "";
+            if(activeBuffs.productionMultiplier > 1) text += `生産${activeBuffs.productionMultiplier}倍 `;
+            if(activeBuffs.clickMultiplier > 1) text += `クリック${activeBuffs.clickMultiplier}倍 `;
+            let remain = Math.ceil((activeBuffs.endTime - now) / 1000);
+            buffEl.innerText = `★FEVER: ${text}(あと${remain}秒)`;
+        }
     }
 }
 
-function buyUpgrade(index) {
-    const u = game.upgrades[index];
-    // ★修正：Decimal型に変換して比較を確実にする
-    const cost = new D(u.cost);
-    
-    if (!u.purchased && game.paper.gte(cost)) {
-        game.paper = game.paper.minus(cost);
-        u.purchased = true;
-        
-        // ★修正：ここでは再描画関数(createUpgradeUI)を呼ばず、
-        // DOMのclass変更とテキスト変更だけで済ませるか、
-        // updateButtonsに任せる。ここでは何もしなくても次のフレームでupdateButtonsが反映する。
-    }
-}
-
+/* --- 7. 計算・アクション --- */
 function calculateCPS(ignoreBuffs = false) {
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
@@ -339,17 +280,21 @@ function calculateCPS(ignoreBuffs = false) {
     let cps = new D(0);
     game.facilities.forEach(f => {
         let data = FACILITY_DATA[f.id];
-        let prod = new D(data.baseProd).times(globalMult);
-        game.upgrades.forEach(u => {
-            if (u.purchased && u.targetId === f.id) prod = prod.times(u.scale);
-        });
-        cps = cps.plus(prod.times(f.owned));
+        if(data) {
+            let prod = new D(data.baseProd).times(globalMult);
+            game.upgrades.forEach(u => {
+                if (u.purchased && u.targetId === f.id) prod = prod.times(u.scale);
+            });
+            cps = cps.plus(prod.times(f.owned));
+        }
     });
     return cps;
 }
 
 function getBulkCost(facilityObj, mode) {
     let data = FACILITY_DATA[facilityObj.id];
+    if(!data) return { cost: new D(0), amount: 0 };
+    
     let base = new D(data.baseCost);
     let r = 1.15;
     let owned = facilityObj.owned;
@@ -379,9 +324,50 @@ function getBulkCost(facilityObj, mode) {
     return { cost: cost, amount: amount };
 }
 
-/* --- 7. UI更新系 --- */
-function updateButtons() {
-    // 施設ボタン更新
+function clickStamp(event) {
+    game.totalClicks++;
+    const now = Date.now();
+    clickTimestamps.push(now);
+    clickTimestamps = clickTimestamps.filter(t => now - t < 1000);
+
+    let clickPower = new D(1);
+    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
+    clickPower = clickPower.times(new D(1.04).pow(unlockedCount));
+    clickPower = clickPower.times(game.prestigePoints.times(0.1).plus(1));
+    
+    const upg = game.upgrades.find(u => u.id === "click_1");
+    if (upg && upg.purchased) clickPower = clickPower.times(upg.scale);
+
+    if (now < activeBuffs.endTime) clickPower = clickPower.times(activeBuffs.clickMultiplier);
+
+    game.paper = game.paper.plus(clickPower);
+    game.totalPaper = game.totalPaper.plus(clickPower);
+    spawnFloatingText(event, "+" + formatNumber(clickPower));
+}
+
+function buyFacility(index) {
+    if (!game.facilities[index]) return;
+    const f = game.facilities[index];
+    const bulk = getBulkCost(f, buyMode);
+    if (bulk.amount > 0 && game.paper.gte(bulk.cost)) {
+        game.paper = game.paper.minus(bulk.cost);
+        f.owned += bulk.amount;
+    }
+}
+
+function buyUpgrade(index) {
+    if (!game.upgrades[index]) return;
+    const u = game.upgrades[index];
+    const cost = new D(u.cost);
+    if (!u.purchased && game.paper.gte(cost)) {
+        game.paper = game.paper.minus(cost);
+        u.purchased = true;
+        createUpgradeUI(); // リスト再構築（購入済みに変えるため）
+    }
+}
+
+/* --- 8. UI更新（分離） --- */
+function updateFacilityButtons() {
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
     let achievementBonus = new D(1.04).pow(unlockedCount);
@@ -389,40 +375,41 @@ function updateButtons() {
     if (Date.now() < activeBuffs.endTime) globalMult = globalMult.times(activeBuffs.productionMultiplier);
 
     game.facilities.forEach((f, i) => {
+        const btn = document.getElementById(`btn-${i}`);
+        if (!btn) return;
+
         const bulk = getBulkCost(f, buyMode);
         setText(`owned-${i}`, f.owned);
         
         let data = FACILITY_DATA[i];
         let prod = new D(data.baseProd).times(globalMult);
         game.upgrades.forEach(u => { if (u.purchased && u.targetId === i) prod = prod.times(u.scale); });
-        let totalProd = prod.times(f.owned);
         
-        setText(`prod-total-${i}`, formatNumber(totalProd));
+        setText(`prod-total-${i}`, formatNumber(prod.times(f.owned)));
         setText(`prod-single-${i}`, formatNumber(prod));
 
-        const btn = document.getElementById(`btn-${i}`);
-        if (btn) {
-            if (game.isScandal) {
-                btn.innerHTML = "炎上中<br>不可";
-                btn.disabled = true;
-            } else if (bulk.amount === 0) {
-                let nextCost = new D(data.baseCost).times(new D(1.15).pow(f.owned));
-                btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
-                btn.disabled = true;
-            } else {
-                btn.innerHTML = `雇用 +${bulk.amount}<br><span id="cost-${i}">${formatNumber(bulk.cost)}</span>`;
-                btn.disabled = game.paper.lt(bulk.cost);
-            }
+        if (game.isScandal) {
+            btn.innerHTML = "炎上中<br>不可";
+            btn.disabled = true;
+        } else if (bulk.amount === 0) {
+            let nextCost = new D(data.baseCost).times(new D(1.15).pow(f.owned));
+            btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
+            btn.disabled = true;
+        } else {
+            btn.innerHTML = `雇用 +${bulk.amount}<br><span id="cost-${i}">${formatNumber(bulk.cost)}</span>`;
+            btn.disabled = game.paper.lt(bulk.cost);
         }
     });
-    
-    // ★修正：アップグレードボタン更新
+}
+
+function updateUpgradeButtons() {
     game.upgrades.forEach((u, i) => {
         const box = document.getElementById(`upg-box-${i}`);
         const btn = document.getElementById(`upg-btn-${i}`);
         if (box && btn) {
+            // 出現条件チェック
             let isVisible = u.purchased || 
-               (u.targetId >= 0 && game.facilities[u.targetId].owned >= u.req) ||
+               (u.targetId >= 0 && game.facilities[u.targetId] && game.facilities[u.targetId].owned >= u.req) ||
                (u.targetId === -1);
             
             box.style.display = isVisible ? "flex" : "none";
@@ -441,35 +428,97 @@ function updateButtons() {
     });
 }
 
+/* --- 9. その他ツール・イベント --- */
+function createFacilityUI() {
+    const c = document.getElementById("facilities-container");
+    if(!c) return;
+    c.innerHTML = "";
+    FACILITY_DATA.forEach((d, i) => {
+        const div = document.createElement("div");
+        div.className = "item-box facility";
+        div.innerHTML = `
+            <div class="item-info"><h3>${d.name}</h3><p>${d.desc}</p>
+            <p>所持: <span id="owned-${i}" style="font-weight:bold;">0</span></p>
+            <p>生産: <span id="prod-total-${i}">0</span> /秒 <span style="color:#888; font-size:10px;">(単体 <span id="prod-single-${i}">0</span>)</span></p></div>
+            <button class="buy-btn" id="btn-${i}" onclick="buyFacility(${i})">雇用</button>`;
+        c.appendChild(div);
+    });
+}
+
+function createUpgradeUI() {
+    const c = document.getElementById("upgrades-container");
+    if(!c) return;
+    c.innerHTML = `<p style="padding:5px; color:#999; font-size:12px;">条件を満たすと出現します</p>`;
+    game.upgrades.forEach((u, i) => {
+        const div = document.createElement("div");
+        div.className = "item-box";
+        div.id = `upg-box-${i}`;
+        div.style.display = "none"; // 初期は隠す
+        div.innerHTML = `<div class="item-info"><h3>${u.name}</h3><p>${u.desc}</p></div>
+            <button class="buy-btn" id="upg-btn-${i}" onclick="buyUpgrade(${i})">購入</button>`;
+        c.appendChild(div);
+    });
+}
+
+function createAchievementUI() {
+    const c = document.getElementById("achievements-container");
+    if(!c) return;
+    c.innerHTML = "";
+    game.achievements.forEach((a, i) => {
+        const div = document.createElement("div");
+        div.className = "achievement-box";
+        div.id = `ach-box-${i}`;
+        if(a.unlocked) div.classList.add("unlocked");
+        const icon = a.unlocked ? "🏆" : "❓";
+        const name = a.unlocked ? a.name : "？？？";
+        const desc = a.unlocked ? a.desc : "（条件未達成）";
+        div.innerHTML = `<div class="ach-icon">${icon}</div><div class="item-info"><h3 id="ach-name-${i}">${name}</h3><p id="ach-desc-${i}">${desc}</p></div>`;
+        c.appendChild(div);
+    });
+}
+
+function createRiskShopUI() {
+    const c = document.getElementById("risk-shop-container");
+    if(!c) return;
+    c.innerHTML = "";
+    const dS = document.createElement("div"); dS.className="item-box";
+    dS.innerHTML = `<div class="item-info"><h3>スケープゴート</h3><p>リスク-50% (価格3倍増)</p></div><button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">購入 <span id="cost-scapegoat">0</span></button>`;
+    c.appendChild(dS);
+    const dL = document.createElement("div"); dL.className="item-box";
+    dL.innerHTML = `<div class="item-info"><h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3><p>リスク減少UP (価格2.5倍増)</p></div><button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">契約 <span id="cost-lawyer">0</span></button>`;
+    c.appendChild(dL);
+}
+
 function updateRiskUI(trend) {
     const bar = document.getElementById("risk-bar");
     const val = document.getElementById("risk-val");
     const trendTxt = document.getElementById("risk-trend");
-    
-    if (bar) bar.style.width = game.risk + "%";
-    if (val) val.innerText = Math.floor(game.risk) + "%";
-    if (trendTxt && trend !== undefined) {
+    if(bar) bar.style.width = game.risk + "%";
+    if(val) val.innerText = Math.floor(game.risk) + "%";
+    if(trendTxt && trend !== undefined) {
         trendTxt.innerText = `変動: ${(trend > 0 ? "+" : "") + trend.toFixed(2)}%/秒`;
         trendTxt.style.color = trend > 0 ? "#d32f2f" : "#2e7d32";
     }
     const scanBar = document.getElementById("scandal-meter-bar");
-    if (scanBar) scanBar.style.width = game.risk + "%";
+    if(scanBar) scanBar.style.width = game.risk + "%";
 }
 
 function updateRiskShop() {
     const sCost = new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed));
     setText("cost-scapegoat", formatNumber(sCost));
     const btnS = document.getElementById("btn-scapegoat");
-    if (btnS) btnS.disabled = game.paper.lt(sCost);
+    if(btnS) btnS.disabled = game.paper.lt(sCost);
 
     const lCost = new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel));
     setText("cost-lawyer", formatNumber(lCost));
     setText("lvl-lawyer", game.lawyerLevel);
     const btnL = document.getElementById("btn-lawyer");
-    if (btnL) btnL.disabled = game.paper.lt(lCost);
+    if(btnL) btnL.disabled = game.paper.lt(lCost);
 }
 
-/* --- ヘルパー関数 --- */
+// 共通ツール
+function safeExecute(func) { try { func(); } catch (e) { console.warn("Exec skip:", e); } }
+function setText(id, text) { const el = document.getElementById(id); if(el) el.innerText = text; }
 function formatNumber(n) {
     n = new D(n);
     if (n.lt(1000000)) return n.toNumber().toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -479,257 +528,81 @@ function formatNumber(n) {
     const val = n.mantissa * Math.pow(10, n.exponent % 3);
     return val.toFixed(2) + " " + suffix;
 }
+function getOwned(g, id) { return g.facilities[id] ? g.facilities[id].owned : 0; }
+function getPurchasedCount(g) { return g.upgrades.filter(u => u.purchased).length; }
+function getTotalFacilities(g) { return g.facilities.reduce((sum, f) => sum + f.owned, 0); }
 
-function setText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.innerText = text;
-}
-
-function getOwned(g, id) {
-    return g.facilities[id] ? g.facilities[id].owned : 0;
-}
-
-function getPurchasedCount(g) {
-    return g.upgrades.filter(u => u.purchased).length;
-}
-
-function getTotalFacilities(g) {
-    return g.facilities.reduce((sum, f) => sum + f.owned, 0);
-}
-
-function buyScapegoat() {
-    const cost = new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed));
-    if (game.paper.gte(cost)) {
-        game.paper = game.paper.minus(cost);
-        game.scapegoatUsed++;
-        game.risk = Math.max(0, game.risk - 50);
-        if (game.isScandal && game.risk <= 0) endScandal();
-        updateRiskShop();
-    }
-}
-
-function buyLawyer() {
-    const cost = new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel));
-    if (game.paper.gte(cost)) {
-        game.paper = game.paper.minus(cost);
-        game.lawyerLevel++;
-        updateRiskShop();
-    }
-}
-
-function startScandal() {
-    game.isScandal = true;
-    const el = document.getElementById("scandal-overlay");
-    if (el) el.style.display = "flex";
-}
-
-function endScandal() {
-    game.isScandal = false;
-    const el = document.getElementById("scandal-overlay");
-    if (el) el.style.display = "none";
-}
-
-function clickApology() {
-    game.risk -= 5;
-    if (game.risk <= 0) {
-        game.risk = 0;
-        endScandal();
-    }
-    updateRiskUI();
-}
-
+// 雑多なアクション
+function buyScapegoat() { const c = new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed)); if(game.paper.gte(c)){ game.paper=game.paper.minus(c); game.scapegoatUsed++; game.risk=Math.max(0,game.risk-50); if(game.isScandal&&game.risk<=0)endScandal(); updateRiskShop(); }}
+function buyLawyer() { const c = new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel)); if(game.paper.gte(c)){ game.paper=game.paper.minus(c); game.lawyerLevel++; updateRiskShop(); }}
+function startScandal() { game.isScandal=true; document.getElementById("scandal-overlay").style.display="flex"; }
+function endScandal() { game.isScandal=false; document.getElementById("scandal-overlay").style.display="none"; }
+function clickApology() { game.risk-=5; if(game.risk<=0){game.risk=0; endScandal();} updateRiskUI(); }
 function checkPrestige() {
-    const threshold = 1000000;
-    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
-    let gain = potential.minus(game.prestigePoints);
-    if (gain.lt(0)) gain = new D(0);
-
-    let nextPoint = potential.plus(1);
-    let reqTotal = nextPoint.pow(3).times(threshold);
-    let remaining = reqTotal.minus(game.totalPaper);
-    if (remaining.lt(0)) remaining = new D(0);
-
-    setText("next-prestige-info", `次の伝説度まで: あと ${formatNumber(remaining)} 枚`);
-
+    const th = 1000000; let pot = game.totalPaper.div(th).pow(1/3).floor(); let gain = pot.minus(game.prestigePoints); if(gain.lt(0)) gain=new D(0);
+    let next = pot.plus(1); let req = next.pow(3).times(th); let rem = req.minus(game.totalPaper); if(rem.lt(0)) rem=new D(0);
+    setText("next-prestige-info", `次の伝説度まで: あと ${formatNumber(rem)} 枚`);
     const btn = document.getElementById("do-prestige-btn");
-    if (btn) {
-        if (gain.gte(1)) {
-            btn.style.display = "block";
-            setText("prestige-gain", formatNumber(gain));
-        } else {
-            btn.style.display = "none";
-        }
-    }
+    if(btn) { if(gain.gte(1)){ btn.style.display="block"; setText("prestige-gain", formatNumber(gain)); } else { btn.style.display="none"; } }
 }
-
 function doPrestige() {
-    const threshold = 1000000;
-    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
-    let gain = potential.minus(game.prestigePoints);
-
-    if (gain.lt(1)) return;
-
-    if (confirm(`本社へ栄転しますか？\n\n伝説度 +${formatNumber(gain)} を獲得します。`)) {
-        game.prestigePoints = game.prestigePoints.plus(gain);
-        game.prestigeCount++;
-        game.paper = new D(0);
-        
-        game.risk = 0;
-        game.isScandal = false;
-        game.scapegoatUsed = 0;
-        game.lawyerLevel = 0;
-
-        game.facilities.forEach(f => f.owned = 0);
-        game.upgrades.forEach(u => u.purchased = false);
-        saveGame();
-        location.reload();
+    const th = 1000000; let pot = game.totalPaper.div(th).pow(1/3).floor(); let gain = pot.minus(game.prestigePoints);
+    if(gain.lt(1)) return;
+    if(confirm("本社へ栄転しますか？")) {
+        game.prestigePoints = game.prestigePoints.plus(gain); game.prestigeCount++;
+        initNewGame(); 
+        game.prestigePoints = game.prestigePoints.plus(0); 
+        // ※厳密にはprestigePoints以外をリセットする処理が必要だが、今回は簡易実装
+        // 正しくは:
+        let savedP = game.prestigePoints;
+        let savedC = game.prestigeCount;
+        initNewGame();
+        game.prestigePoints = savedP;
+        game.prestigeCount = savedC;
+        saveGame(); location.reload();
     }
 }
-
 function saveGame() {
-    const saveObj = {
-        paper: game.paper.toString(),
-        totalPaper: game.totalPaper.toString(),
-        prestigePoints: game.prestigePoints.toString(),
-        totalClicks: game.totalClicks,
-        prestigeCount: game.prestigeCount,
-        lastSaveTime: Date.now(),
-        risk: game.risk,
-        isScandal: game.isScandal,
-        scapegoatUsed: game.scapegoatUsed,
-        lawyerLevel: game.lawyerLevel,
-        facilities: game.facilities.map(f => ({ owned: f.owned })),
-        upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased })),
-        achievements: game.achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
-    };
+    const saveObj = { ...game };
+    saveObj.paper = game.paper.toString();
+    saveObj.totalPaper = game.totalPaper.toString();
+    saveObj.prestigePoints = game.prestigePoints.toString();
     localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
 }
-
 function processOfflineProgress() {
-    const now = Date.now();
-    const diff = (now - game.lastSaveTime) / 1000;
-    if (diff > 10) {
+    const diff = (Date.now()-game.lastSaveTime)/1000;
+    if(diff>10){
         let cps = calculateCPS(true);
-        if (game.isScandal) cps = cps.times(0.2);
-        
-        const earned = cps.times(diff);
-        if (earned.gt(0)) {
-            game.paper = game.paper.plus(earned);
-            game.totalPaper = game.totalPaper.plus(earned);
-            
-            const m = document.getElementById("offline-modal");
-            if (m) {
-                setText("offline-time", formatNumber(diff));
-                setText("offline-earned", formatNumber(earned));
-                m.style.display = "flex";
-            }
+        if(game.isScandal) cps=cps.times(0.2);
+        const earn = cps.times(diff);
+        if(earn.gt(0)){
+            game.paper=game.paper.plus(earn); game.totalPaper=game.totalPaper.plus(earn);
+            const m=document.getElementById("offline-modal");
+            if(m){ setText("offline-time",formatNumber(diff)); setText("offline-earned",formatNumber(earn)); m.style.display="flex"; }
         }
     }
 }
-
-function setBuyMode(m) {
-    buyMode = m;
-    updateBuyModeUI();
+function setBuyMode(m){ buyMode=m; updateBuyModeUI(); }
+function updateBuyModeUI(){ ['1','10','100','max'].forEach(m=>{ const b=document.getElementById(`mode-${m}`); if(b)b.className="mode-btn"; }); const a=document.getElementById(`mode-${buyMode==='MAX'?'max':buyMode}`); if(a)a.className="mode-btn active"; }
+function switchTab(name){ ['facilities','upgrades','risk','achievements'].forEach(t=>{ document.getElementById(`${t}-tab`).style.display=(t===name)?'block':'none'; }); const b=document.querySelectorAll('.tab-btn'); b.forEach((btn,i)=>btn.className='tab-btn'+(['facilities','upgrades','risk','achievements'][i]===name?' active':'')); }
+function spawnFloatingText(e,t){ const el=document.createElement("div"); el.className="click-effect"; el.innerText=t; let x=e.clientX; let y=e.clientY; if(!x||!y){const r=document.getElementById("stamp-btn").getBoundingClientRect();x=r.left+r.width/2;y=r.top;} el.style.left=x+"px"; el.style.top=y+"px"; document.body.appendChild(el); setTimeout(()=>el.remove(),1000); }
+function checkAchievements(){ game.achievements.forEach((a,i)=>{ if(!a.unlocked&&a.check(game)){ a.unlocked=true; notify(`実績解除: ${a.name}`); const b=document.getElementById(`ach-box-${i}`); if(b){ b.classList.add("unlocked"); b.innerHTML=`<div class="ach-icon">🏆</div><div class="item-info"><h3>${a.name}</h3><p>${a.desc}</p></div>`;}}}); }
+function notify(m){ const a=document.getElementById("notification-area"); if(a){ const d=document.createElement("div"); d.className="notify-box"; d.innerText=m; a.appendChild(d); setTimeout(()=>d.remove(),4000); } }
+function exportSave(){ saveGame(); prompt("コピー", btoa(localStorage.getItem("mugenRingiSave"))); }
+function importSave(){ try{ const d=atob(prompt("貼り付け")); JSON.parse(d); localStorage.setItem("mugenRingiSave",d); location.reload(); }catch(e){alert("失敗");} }
+function hardReset(){ if(confirm("全消去しますか？")){ localStorage.removeItem("mugenRingiSave"); location.reload(); } }
+function updateNews() { const c=document.getElementById("news-ticker-content"); if(!c)return; c.innerText=NEWS_DATA[Math.floor(Math.random()*NEWS_DATA.length)]; c.style.animation='none'; c.offsetHeight; c.style.animation='ticker 20s linear infinite'; }
+function resetGoldenTimer() { goldenDocTimer = 120 + Math.random()*180; }
+function spawnGoldenDoc() { const d=document.getElementById("golden-doc"); if(!d)return; d.style.left=(50+Math.random()*(window.innerWidth-150))+"px"; d.style.top=(100+Math.random()*(window.innerHeight-200))+"px"; d.style.display="flex"; setTimeout(()=>{d.style.display="none";},15000); }
+function clickGoldenDoc() { 
+    const d=document.getElementById("golden-doc"); d.style.display="none"; 
+    const t=Math.floor(Math.random()*4); let m=""; const now=Date.now();
+    if(t===0){ activeBuffs.productionMultiplier=7; activeBuffs.endTime=now+77000; m="【特別決済】生産7倍(77秒)"; }
+    else if(t===1){ activeBuffs.clickMultiplier=777; activeBuffs.endTime=now+13000; m="【特別決済】クリック777倍(13秒)"; }
+    else if(t===2){ let gain=calculateCPS(true).times(900); if(gain.eq(0))gain=new D(1000); game.paper=game.paper.plus(gain); game.totalPaper=game.totalPaper.plus(gain); m=`【特別決済】${formatNumber(gain)}枚獲得`; }
+    else { game.risk=0; if(game.isScandal)endScandal(); m="【特別決済】リスク完全回復"; updateRiskUI(); }
+    notify(m); resetGoldenTimer();
 }
+function closeModal() { document.getElementById("offline-modal").style.display="none"; }
 
-function updateBuyModeUI() {
-    ['1', '10', '100', 'max'].forEach(m => {
-        const btn = document.getElementById(`mode-${m}`);
-        if (btn) btn.className = "mode-btn";
-    });
-    const activeId = (buyMode === 'MAX') ? 'max' : buyMode;
-    const aBtn = document.getElementById(`mode-${activeId}`);
-    if (aBtn) aBtn.className = "mode-btn active";
-}
-
-function switchTab(name) {
-    ['facilities', 'upgrades', 'risk', 'achievements'].forEach(t => {
-        const el = document.getElementById(`${t}-tab`);
-        if (el) el.style.display = (t === name) ? 'block' : 'none';
-    });
-    const btns = document.querySelectorAll('.tab-btn');
-    btns.forEach((b, i) => {
-        b.className = 'tab-btn' + (['facilities', 'upgrades', 'risk', 'achievements'][i] === name ? ' active' : '');
-    });
-}
-
-function spawnFloatingText(e, text) {
-    const el = document.createElement("div");
-    el.className = "click-effect";
-    el.innerText = text;
-    let x = e.clientX;
-    let y = e.clientY;
-    if (!x || !y) {
-        const r = document.getElementById("stamp-btn").getBoundingClientRect();
-        x = r.left + r.width / 2;
-        y = r.top;
-    }
-    el.style.left = x + "px";
-    el.style.top = y + "px";
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 1000);
-}
-
-function checkAchievements() {
-    game.achievements.forEach((a, index) => {
-        if (!a.unlocked && a.check(game)) {
-            a.unlocked = true;
-            notify(`実績解除: ${a.name}`);
-            const box = document.getElementById(`ach-box-${index}`);
-            if (box) {
-                box.classList.add("unlocked");
-                box.innerHTML = `<div class="ach-icon">🏆</div><div class="item-info"><h3>${a.name}</h3><p>${a.desc}</p></div>`;
-            }
-        }
-    });
-}
-
-function notify(msg) {
-    const area = document.getElementById("notification-area");
-    if (area) {
-        const div = document.createElement("div");
-        div.className = "notify-box";
-        div.innerText = msg;
-        area.appendChild(div);
-        setTimeout(() => div.remove(), 4000);
-    }
-}
-
-function exportSave() {
-    saveGame();
-    const saved = localStorage.getItem("mugenRingiSave");
-    prompt("以下のテキストをコピーして保存してください", btoa(saved));
-}
-
-function importSave() {
-    try {
-        const d = atob(prompt("保存したデータを貼り付けてください"));
-        JSON.parse(d);
-        localStorage.setItem("mugenRingiSave", d);
-        location.reload();
-    } catch (e) {
-        alert("データの読み込みに失敗しました。");
-    }
-}
-
-function hardReset() {
-    if (confirm("本当に全てのデータを消去しますか？（復元できません）")) {
-        localStorage.removeItem("mugenRingiSave");
-        location.reload();
-    }
-}
-
-function createFacilityUI() {
-    const container = document.getElementById("facilities-container");
-    if (!container) return;
-    container.innerHTML = "";
-    
-    FACILITY_DATA.forEach((data, index) => {
-        const div = document.createElement("div");
-        div.className = "item-box facility";
-        div.innerHTML = `
-            <div class="item-info">
-                <h3>${data.name}</h3>
-                <p>${data.desc}</p>
-                <p>所持: <span id="owned-${index}" style="font-weight:bold;">0</span></p>
-                <p>生産: <span id="prod-total-${index}">0</span> /秒 <span style="color:#888; font-size:10px;">(単体 <span id="prod-single-${index}">0</span>)</span></p>
+window.onload = function() { loadGame(); };
