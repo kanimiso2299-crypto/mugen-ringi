@@ -1,4 +1,4 @@
-/* --- 無限稟議 ゲームロジック (Ver 9.3: Bonus Tuning) --- */
+/* --- 無限稟議 ゲームロジック (Ver 9.4: High Inflation) --- */
 
 if (typeof Decimal === 'undefined') { alert("Err: Lib"); throw new Error("Decimal missing"); }
 const D = Decimal;
@@ -22,7 +22,6 @@ let game = {
     lastSaveTime: Date.now()
 };
 
-// ランタイム変数
 let lastFrameTime = Date.now();
 let clickTimestamps = [];
 let buyMode = 1;
@@ -31,7 +30,7 @@ let goldenDocTimer = 0;
 let activeBuffs = { productionMultiplier: 1, clickMultiplier: 1, endTime: 0 };
 let cachedCPS = new D(0);
 
-/* --- ロード処理 --- */
+/* --- 初期化 --- */
 function loadGame() {
     try {
         const saved = localStorage.getItem("mugenRingiSave");
@@ -114,7 +113,7 @@ function initUI() {
     if(tab) tab.style.display = (game.prestigeCount > 0) ? "block" : "none";
 }
 
-/* --- ゲームループ --- */
+/* --- ループ --- */
 function gameLoop() {
     const now = Date.now();
     const dt = (now - lastFrameTime) / 1000;
@@ -210,18 +209,12 @@ function updateBuffLogic(now) {
 
 /* --- 計算 --- */
 function calculateCPS(ignoreBuffs = false) {
-    // ★ LPボーナス: 1ポイントにつき10% (0.1) 加算
-    // 10ポイントで +100% (2倍)
-    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    // ★ LPボーナス強化: 1ポイントにつき +100% (1.0)
+    let prestigeBonus = game.prestigePoints.times(1.0).plus(1);
     
-    // ★ 実績ボーナス: 1個につき2% (1.02) 乗算
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
     let achievementBonus = new D(1.02).pow(unlockedCount);
-    
-    // レガシー: 裏帳簿 (さらに5%乗算)
-    if(hasLegacy("l_ledger")) {
-        achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
-    }
+    if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
     
     let legacyMult = hasLegacy("l_infinite") ? 10 : 1;
     let globalMult = prestigeBonus.times(achievementBonus).times(legacyMult);
@@ -240,7 +233,6 @@ function calculateCPS(ignoreBuffs = false) {
                     prod = prod.times(u.scale);
                 }
             });
-            // レガシー派閥
             if(f.id === 2 && hasLegacy("l_fac_1")) prod = prod.times(1 + getOwned(game, 0) * 0.001);
             if(f.id === 4 && hasLegacy("l_fac_2")) prod = prod.times(1 + getOwned(game, 1) * 0.001);
 
@@ -253,7 +245,6 @@ function calculateCPS(ignoreBuffs = false) {
 function getBulkCost(facilityObj, mode) {
     let data = FACILITY_DATA[facilityObj.id];
     if(!data) return { cost: new D(0), amount: 0 };
-    
     let base = new D(data.baseCost);
     let r = hasLegacy("l_lifetime") ? 1.14 : 1.15;
     let owned = facilityObj.owned;
@@ -293,23 +284,20 @@ function clickStamp(event) {
     let clickPower = new D(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
     
-    // ★ 実績ボーナス: 1個につき2% (1.02)
     let achievementBonus = new D(1.02).pow(unlockedCount);
     if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
     
-    // ★ LPボーナス: 1ポイントにつき10%
-    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    // ★ LPボーナス強化
+    let prestigeBonus = game.prestigePoints.times(1.0).plus(1);
     
     clickPower = clickPower.times(achievementBonus).times(prestigeBonus);
     if(hasLegacy("l_infinite")) clickPower = clickPower.times(10);
 
-    // 通常UG
     game.upgrades.forEach(u => {
         if (u.purchased && u.targetId === -1 && u.type === "mul") {
             clickPower = clickPower.times(u.scale);
         }
     });
-    
     let cpsAdd = new D(0);
     let currentCPS = cachedCPS;
     game.upgrades.forEach(u => {
@@ -333,7 +321,6 @@ function buyFacility(index) {
     if (bulk.amount > 0 && game.paper.gte(bulk.cost)) {
         game.paper = game.paper.minus(bulk.cost);
         f.owned += bulk.amount;
-        
         let riskIncrease = 0;
         game.facilities.forEach(f => { 
             let d = FACILITY_DATA[f.id];
@@ -368,9 +355,8 @@ function buyLegacy(id) {
 
 /* --- UI更新 --- */
 function updateFacilityButtons() {
-    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    let prestigeBonus = game.prestigePoints.times(1.0).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    // ★ 表示用計算：実績2%
     let achievementBonus = new D(1.02).pow(unlockedCount);
     if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
     let legacyMult = hasLegacy("l_infinite") ? 10 : 1;
@@ -512,15 +498,19 @@ function updateRiskShop() {
 function startScandal() { game.isScandal=true; document.getElementById("scandal-overlay").style.display="flex"; }
 function endScandal() { game.isScandal=false; document.getElementById("scandal-overlay").style.display="none"; }
 function clickApology() { game.risk-=5; if(game.risk<=0){game.risk=0; endScandal();} updateRiskUI(); }
+
+// ★ LP計算式変更 (2乗根 & 基準10000)
 function checkPrestige() {
-    const th = 1000000; let pot = game.totalPaper.div(th).pow(1/3).floor(); let gain = pot.minus(game.prestigePoints); if(gain.lt(0)) gain=new D(0);
-    let next = pot.plus(1); let req = next.pow(3).times(th); let rem = req.minus(game.totalPaper); if(rem.lt(0)) rem=new D(0);
+    const th = 10000; // 1万
+    let pot = game.totalPaper.div(th).sqrt().floor(); // 2乗根
+    let gain = pot.minus(game.prestigePoints); if(gain.lt(0)) gain=new D(0);
+    let next = pot.plus(1); let req = next.pow(2).times(th); let rem = req.minus(game.totalPaper); if(rem.lt(0)) rem=new D(0);
     setText("next-prestige-info", `次の伝説度まで: あと ${formatNumber(rem)} 枚`);
     const btn = document.getElementById("do-prestige-btn");
     if(btn) { if(gain.gte(1)){ btn.style.display="block"; setText("prestige-gain", formatNumber(gain)); } else { btn.style.display="none"; } }
 }
 function doPrestige() {
-    const th = 1000000; let pot = game.totalPaper.div(th).pow(1/3).floor(); let gain = pot.minus(game.prestigePoints);
+    const th = 10000; let pot = game.totalPaper.div(th).sqrt().floor(); let gain = pot.minus(game.prestigePoints);
     if(gain.lt(1)) return;
     if(confirm("本社へ栄転しますか？\n(伝説度を獲得し、リセットします)")) {
         game.prestigePoints = game.prestigePoints.plus(gain); game.prestigeCount++;
