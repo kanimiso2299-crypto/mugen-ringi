@@ -1,6 +1,5 @@
 @charset "UTF-8";
 
-/* 全体設定 */
 body {
     font-family: "MS Mincho", "Hiragino Mincho ProN", serif;
     background-color: #f0f2f5;
@@ -13,7 +12,6 @@ body {
     overflow: hidden;
 }
 
-/* 左エリア（作業場） */
 #work-area {
     flex: 1;
     display: flex;
@@ -25,7 +23,6 @@ body {
     position: relative;
 }
 
-/* 右エリア（パネル） */
 #right-panel {
     flex: 1;
     padding-left: 20px;
@@ -35,7 +32,6 @@ body {
     border-left: 1px solid #ddd;
 }
 
-/* タブメニュー */
 .tabs {
     display: flex;
     border-bottom: 2px solid #ddd;
@@ -53,29 +49,43 @@ body {
     font-size: 12px;
 }
 
-.tab-btn:hover {
-    background-color: #e0e0e0;
+.tab-btn:hover { background-color: #e0e0e0; }
+.tab-btn.active { background: #fff; color: #bf0000; border-bottom: 2px solid #bf0000; }
+
+/* ★新機能：まとめ買いボタンエリア */
+#buy-mode-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
 }
 
-.tab-btn.active {
+.mode-btn {
     background: #fff;
-    color: #bf0000;
-    border-bottom: 2px solid #bf0000;
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+    margin-right: 5px;
+    cursor: pointer;
+    font-size: 11px;
+    border-radius: 3px;
 }
 
-/* スクロールエリア */
+.mode-btn:hover { background-color: #e9e9e9; }
+.mode-btn.active {
+    background-color: #555;
+    color: #fff;
+    border-color: #555;
+}
+
 .scroll-content {
     flex: 1;
     overflow-y: auto;
     padding-right: 5px;
 }
 
-/* テキスト系 */
-h1 {
-    margin: 0;
-    font-size: 24px;
-    color: #444;
-}
+h1 { margin: 0; font-size: 24px; color: #444; }
 
 #bonus-display {
     background-color: #e8f5e9;
@@ -106,13 +116,8 @@ h1 {
     font-family: 'Courier New', monospace;
 }
 
-#cps-display {
-    font-size: 18px;
-    color: #666;
-    margin-bottom: 30px;
-}
+#cps-display { font-size: 18px; color: #666; margin-bottom: 30px; }
 
-/* ハンコボタン */
 #stamp-btn {
     width: 200px;
     height: 200px;
@@ -132,23 +137,10 @@ h1 {
     user-select: none;
 }
 
-#stamp-btn:active {
-    transform: scale(0.95);
-    background-color: #ffe6e6;
-}
+#stamp-btn:active { transform: scale(0.95); background-color: #ffe6e6; }
 
-/* 設定・管理エリア */
-#settings-area {
-    margin-top: 40px;
-    width: 90%;
-    text-align: center;
-}
-
-#system-msg {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 10px;
-}
+#settings-area { margin-top: 40px; width: 90%; text-align: center; }
+#system-msg { font-size: 12px; color: #999; margin-bottom: 10px; }
 
 .prestige-btn {
     background-color: #333;
@@ -161,10 +153,7 @@ h1 {
     font-weight: bold;
     display: none;
 }
-
-.prestige-btn:hover {
-    background-color: #555;
-}
+.prestige-btn:hover { background-color: #555; }
 
 .data-btn {
     background-color: #fff;
@@ -175,21 +164,10 @@ h1 {
     cursor: pointer;
     border-radius: 3px;
 }
+.data-btn:hover { background-color: #eee; }
+.data-btn.danger { color: #d32f2f; border-color: #d32f2f; }
+.data-btn.danger:hover { background-color: #ffebee; }
 
-.data-btn:hover {
-    background-color: #eee;
-}
-
-.data-btn.danger {
-    color: #d32f2f;
-    border-color: #d32f2f;
-}
-
-.data-btn.danger:hover {
-    background-color: #ffebee;
-}
-
-/* リストアイテム共通 */
 .item-box {
     border: 1px solid #ddd;
     padding: 10px;
@@ -200,26 +178,11 @@ h1 {
     justify-content: space-between;
     align-items: center;
 }
+.item-box:hover { background-color: #eef; }
+.item-box.bought { background-color: #dff0d8; opacity: 0.7; }
 
-.item-box:hover {
-    background-color: #eef;
-}
-
-.item-box.bought {
-    background-color: #dff0d8;
-    opacity: 0.7;
-}
-
-.item-info h3 {
-    margin: 0 0 3px 0;
-    font-size: 15px;
-}
-
-.item-info p {
-    margin: 0;
-    font-size: 11px;
-    color: #555;
-}
+.item-info h3 { margin: 0 0 3px 0; font-size: 15px; }
+.item-info p { margin: 0; font-size: 11px; color: #555; }
 
 .buy-btn {
     background-color: #4CAF50;
@@ -233,20 +196,9 @@ h1 {
     font-size: 11px;
     text-align: center;
 }
+.buy-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+.buy-btn.bought-btn { background-color: transparent; color: #4CAF50; box-shadow: none; cursor: default; }
 
-.buy-btn:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-}
-
-.buy-btn.bought-btn {
-    background-color: transparent;
-    color: #4CAF50;
-    box-shadow: none;
-    cursor: default;
-}
-
-/* 実績アイテム */
 .achievement-box {
     border: 1px solid #ccc;
     padding: 8px;
@@ -257,22 +209,14 @@ h1 {
     display: flex;
     align-items: center;
 }
-
 .achievement-box.unlocked {
     background-color: #fff3e0;
     border-color: #ffb74d;
     color: #333;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+.ach-icon { font-size: 20px; margin-right: 10px; width: 30px; text-align: center; }
 
-.ach-icon {
-    font-size: 20px;
-    margin-right: 10px;
-    width: 30px;
-    text-align: center;
-}
-
-/* 演出アニメーション */
 .click-effect {
     position: absolute;
     color: #bf0000;
@@ -281,19 +225,11 @@ h1 {
     pointer-events: none;
     animation: floatUp 1s forwards;
 }
-
 @keyframes floatUp {
-    0% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(-50px);
-    }
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-50px); }
 }
 
-/* 通知エリア */
 #notification-area {
     position: fixed;
     bottom: 20px;
@@ -303,7 +239,6 @@ h1 {
     gap: 10px;
     pointer-events: none;
 }
-
 .notify-box {
     background-color: #333;
     color: #fff;
@@ -313,20 +248,51 @@ h1 {
     animation: fadeOut 4s forwards;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
-
 @keyframes fadeOut {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    10% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    80% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0;
-    }
+    0% { opacity: 0; transform: translateY(20px); }
+    10% { opacity: 1; transform: translateY(0); }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
 }
+
+/* ★新機能：モーダルウィンドウ */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.modal-box {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    max-width: 400px;
+    width: 90%;
+}
+.modal-box h2 { margin-top: 0; color: #444; }
+.offline-result {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+.modal-box button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 4px;
+}
+.modal-box button:hover { background-color: #45a049; }
