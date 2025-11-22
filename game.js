@@ -1,4 +1,4 @@
-/* --- 無限稟議 ゲームロジック (Ver 9.0: Split & Legacy) --- */
+/* --- 無限稟議 ゲームロジック (Ver 9.3: Bonus Tuning) --- */
 
 if (typeof Decimal === 'undefined') { alert("Err: Lib"); throw new Error("Decimal missing"); }
 const D = Decimal;
@@ -17,7 +17,7 @@ let game = {
     lawyerLevel: 0,
     facilities: [],
     upgrades: [],
-    legacyUpgrades: [], // ★新規：購入済みレガシーIDリスト
+    legacyUpgrades: [],
     achievements: [],
     lastSaveTime: Date.now()
 };
@@ -31,7 +31,7 @@ let goldenDocTimer = 0;
 let activeBuffs = { productionMultiplier: 1, clickMultiplier: 1, endTime: 0 };
 let cachedCPS = new D(0);
 
-/* --- 初期化 --- */
+/* --- ロード処理 --- */
 function loadGame() {
     try {
         const saved = localStorage.getItem("mugenRingiSave");
@@ -43,18 +43,16 @@ function loadGame() {
             game.totalClicks = Number(parsed.totalClicks) || 0;
             game.prestigeCount = Number(parsed.prestigeCount) || 0;
             game.lastSaveTime = Number(parsed.lastSaveTime) || Date.now();
-            
-            game.risk = Number(parsed.risk) || 0;
+            game.risk = (typeof parsed.risk === 'number') ? parsed.risk : 0;
             game.isScandal = !!parsed.isScandal;
-            game.scapegoatUsed = Number(parsed.scapegoatUsed) || 0;
-            game.lawyerLevel = Number(parsed.lawyerLevel) || 0;
+            game.scapegoatUsed = parsed.scapegoatUsed || 0;
+            game.lawyerLevel = parsed.lawyerLevel || 0;
 
             game.facilities = FACILITY_DATA.map((data, i) => {
                 let owned = 0;
                 if (parsed.facilities && parsed.facilities[i]) owned = Number(parsed.facilities[i].owned) || 0;
                 return { id: data.id, owned: owned };
             });
-
             game.upgrades = UPGRADE_DATA.map(data => {
                 let purchased = false;
                 if (parsed.upgrades) {
@@ -63,10 +61,7 @@ function loadGame() {
                 }
                 return { ...data, purchased: purchased };
             });
-
-            // ★新規：レガシー復元
             game.legacyUpgrades = Array.isArray(parsed.legacyUpgrades) ? parsed.legacyUpgrades : [];
-
             game.achievements = ACHIEVEMENT_DATA.map(data => {
                 let unlocked = false;
                 if (parsed.achievements) {
@@ -75,7 +70,6 @@ function loadGame() {
                 }
                 return { ...data, unlocked: unlocked };
             });
-
             processOfflineProgress();
         } else {
             initNewGame();
@@ -110,14 +104,12 @@ function initNewGame() {
 function initUI() {
     safeExecute(createFacilityUI);
     safeExecute(createUpgradeUI);
-    safeExecute(createLegacyShopUI); // ★新規
+    safeExecute(createLegacyShopUI);
     safeExecute(createAchievementUI);
     safeExecute(createRiskShopUI);
     safeExecute(updateBuyModeUI);
     safeExecute(updateNews);
     if (game.isScandal) startScandal();
-    
-    // レガシータブの表示制御
     const tab = document.getElementById("tab-legacy-btn");
     if(tab) tab.style.display = (game.prestigeCount > 0) ? "block" : "none";
 }
@@ -144,13 +136,20 @@ function gameLoop() {
     safeExecute(() => updateGoldenDocLogic(dt));
     safeExecute(() => updateBuffLogic(now));
     
+    // 実績ボーナス表示更新
+    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
+    let achievementBonus = new D(1.02).pow(unlockedCount);
+    if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
+    let bonusPercent = achievementBonus.minus(1).times(100);
+    
+    setText("bonus-display", `実績ボーナス: +${formatNumber(bonusPercent)}% (${unlockedCount}個)`);
     setText("counter", formatNumber(game.paper));
     setText("cps-display", "毎秒処理: " + formatNumber(effectiveCPS) + " 枚");
     setText("legacy-points-display", formatNumber(game.prestigePoints));
 
     safeExecute(updateFacilityButtons);
     safeExecute(updateUpgradeButtons);
-    safeExecute(updateLegacyShopButtons); // ★新規
+    safeExecute(updateLegacyShopButtons);
     safeExecute(updateRiskShop);
     safeExecute(checkPrestige);
     safeExecute(checkAchievements);
@@ -167,8 +166,6 @@ function updateRiskLogic(dt) {
         if (d && d.riskPerSec > 0) riskIncrease += d.riskPerSec * f.owned;
     });
     let riskDecay = 1.0 + (game.lawyerLevel * 0.5);
-    
-    // レガシー効果：リスク軽減
     if(hasLegacy("l_risk")) riskIncrease *= 0.8;
 
     if (!game.isScandal) {
@@ -213,19 +210,22 @@ function updateBuffLogic(now) {
 
 /* --- 計算 --- */
 function calculateCPS(ignoreBuffs = false) {
+    // ★ LPボーナス: 1ポイントにつき10% (0.1) 加算
+    // 10ポイントで +100% (2倍)
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    let achievementBonus = new D(1.04).pow(unlockedCount);
     
-    // レガシー効果：裏帳簿
+    // ★ 実績ボーナス: 1個につき2% (1.02) 乗算
+    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
+    let achievementBonus = new D(1.02).pow(unlockedCount);
+    
+    // レガシー: 裏帳簿 (さらに5%乗算)
     if(hasLegacy("l_ledger")) {
         achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
     }
-    // レガシー効果：無限稟議
-    let legacyMult = new D(1);
-    if(hasLegacy("l_infinite")) legacyMult = legacyMult.times(10);
-
+    
+    let legacyMult = hasLegacy("l_infinite") ? 10 : 1;
     let globalMult = prestigeBonus.times(achievementBonus).times(legacyMult);
+    
     if (!ignoreBuffs && Date.now() < activeBuffs.endTime) {
         globalMult = globalMult.times(activeBuffs.productionMultiplier);
     }
@@ -235,23 +235,14 @@ function calculateCPS(ignoreBuffs = false) {
         let data = FACILITY_DATA[f.id];
         if(data) {
             let prod = new D(data.baseProd).times(globalMult);
-            
-            // 通常アップグレード
             game.upgrades.forEach(u => {
                 if (u.purchased && u.targetId === f.id && (!u.type || u.type === "mul")) {
                     prod = prod.times(u.scale);
                 }
             });
-
-            // レガシー効果：派閥
-            if(f.id === 2 && hasLegacy("l_fac_1")) { // ベテラン
-                let count = getOwned(game, 0); // アルバイト
-                prod = prod.times(1 + count * 0.001); // 10人で1%
-            }
-            if(f.id === 4 && hasLegacy("l_fac_2")) { // AI
-                let count = getOwned(game, 1); // 捺印機
-                prod = prod.times(1 + count * 0.001);
-            }
+            // レガシー派閥
+            if(f.id === 2 && hasLegacy("l_fac_1")) prod = prod.times(1 + getOwned(game, 0) * 0.001);
+            if(f.id === 4 && hasLegacy("l_fac_2")) prod = prod.times(1 + getOwned(game, 1) * 0.001);
 
             cps = cps.plus(prod.times(f.owned));
         }
@@ -264,9 +255,7 @@ function getBulkCost(facilityObj, mode) {
     if(!data) return { cost: new D(0), amount: 0 };
     
     let base = new D(data.baseCost);
-    // レガシー効果：終身雇用 (価格上昇緩和)
     let r = hasLegacy("l_lifetime") ? 1.14 : 1.15;
-    
     let owned = facilityObj.owned;
     let cost = new D(0);
     let amount = 0;
@@ -303,10 +292,15 @@ function clickStamp(event) {
 
     let clickPower = new D(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-    clickPower = clickPower.times(new D(1.04).pow(unlockedCount)).times(prestigeBonus);
     
-    // レガシー効果
+    // ★ 実績ボーナス: 1個につき2% (1.02)
+    let achievementBonus = new D(1.02).pow(unlockedCount);
+    if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
+    
+    // ★ LPボーナス: 1ポイントにつき10%
+    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    
+    clickPower = clickPower.times(achievementBonus).times(prestigeBonus);
     if(hasLegacy("l_infinite")) clickPower = clickPower.times(10);
 
     // 通常UG
@@ -360,15 +354,14 @@ function buyUpgrade(index) {
     }
 }
 
-// ★新規：レガシー購入
 function buyLegacy(id) {
     const data = LEGACY_UPGRADE_DATA.find(d => d.id === id);
     if(!data) return;
     if(!hasLegacy(id) && game.prestigePoints.gte(data.cost)) {
-        if(confirm(`伝説度(LP)を ${data.cost} 消費して購入しますか？\n(所持ボーナスが減少します)`)) {
+        if(confirm(`伝説度(LP)を ${data.cost} 消費して購入しますか？\n(生産ボーナスが減少します)`)) {
             game.prestigePoints = game.prestigePoints.minus(data.cost);
             game.legacyUpgrades.push(id);
-            createLegacyShopUI(); // UI再構築
+            createLegacyShopUI();
         }
     }
 }
@@ -377,7 +370,8 @@ function buyLegacy(id) {
 function updateFacilityButtons() {
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    let achievementBonus = new D(1.04).pow(unlockedCount);
+    // ★ 表示用計算：実績2%
+    let achievementBonus = new D(1.02).pow(unlockedCount);
     if(hasLegacy("l_ledger")) achievementBonus = achievementBonus.times(new D(1.05).pow(unlockedCount));
     let legacyMult = hasLegacy("l_infinite") ? 10 : 1;
     
@@ -395,7 +389,6 @@ function updateFacilityButtons() {
         game.upgrades.forEach(u => { 
             if (u.purchased && u.targetId === i && (!u.type || u.type === "mul")) prod = prod.times(u.scale); 
         });
-        // 派閥計算
         if(i === 2 && hasLegacy("l_fac_1")) prod = prod.times(1 + getOwned(game, 0) * 0.001);
         if(i === 4 && hasLegacy("l_fac_2")) prod = prod.times(1 + getOwned(game, 1) * 0.001);
 
@@ -427,13 +420,10 @@ function updateUpgradeButtons() {
                (u.targetId === -1);
             box.style.display = isVisible ? "flex" : "none";
             if (u.purchased) {
-                btn.innerHTML = "済";
-                btn.className = "buy-btn bought-btn";
-                btn.disabled = true;
+                btn.innerHTML = "済"; btn.className = "buy-btn bought-btn"; btn.disabled = true;
             } else {
                 const cost = new D(u.cost);
-                btn.innerHTML = `購入 ${formatNumber(cost)}`;
-                btn.className = "buy-btn";
+                btn.innerHTML = `購入 ${formatNumber(cost)}`; btn.className = "buy-btn";
                 btn.disabled = game.paper.lt(cost) || game.isScandal;
             }
         }
@@ -441,7 +431,6 @@ function updateUpgradeButtons() {
 }
 
 function updateLegacyShopButtons() {
-    // レガシーは頻繁に更新不要だが、所持ポイントチェックのため
     LEGACY_UPGRADE_DATA.forEach((d) => {
         const btn = document.getElementById(`btn-legacy-${d.id}`);
         if(btn && !hasLegacy(d.id)) {
@@ -482,22 +471,18 @@ function createRiskShopUI() {
     const dS = document.createElement("div"); dS.className="item-box"; dS.innerHTML = `<div class="item-info"><h3>スケープゴート</h3><p>リスク-50% (価格3倍増)</p></div><button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">購入 <span id="cost-scapegoat">0</span></button>`; c.appendChild(dS);
     const dL = document.createElement("div"); dL.className="item-box"; dL.innerHTML = `<div class="item-info"><h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3><p>リスク減少UP (価格2.5倍増)</p></div><button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">契約 <span id="cost-lawyer">0</span></button>`; c.appendChild(dL);
 }
-// ★新規：レガシーショップUI
 function createLegacyShopUI() {
     const c = document.getElementById("legacy-shop-container"); if(!c) return; c.innerHTML = "";
     LEGACY_UPGRADE_DATA.forEach(d => {
         const div = document.createElement("div"); div.className = "item-box legacy";
         const isBought = hasLegacy(d.id);
-        let btnHtml = isBought 
-            ? `<button class="buy-btn legacy-btn" disabled>取得済</button>`
-            : `<button class="buy-btn legacy-btn" id="btn-legacy-${d.id}" onclick="buyLegacy('${d.id}')">取得 ${d.cost} LP</button>`;
-        
+        let btnHtml = isBought ? `<button class="buy-btn legacy-btn" disabled>取得済</button>` : `<button class="buy-btn legacy-btn" id="btn-legacy-${d.id}" onclick="buyLegacy('${d.id}')">取得 ${d.cost} LP</button>`;
         div.innerHTML = `<div class="item-info"><h3>${d.name}</h3><p>${d.desc}</p></div>${btnHtml}`;
         c.appendChild(div);
     });
 }
 
-/* --- ヘルパー・イベント --- */
+/* --- ヘルパー --- */
 function safeExecute(func) { try { func(); } catch (e) { console.warn("Exec skip:", e); } }
 function setText(id, text) { const el = document.getElementById(id); if(el) el.innerText = text; }
 function formatNumber(n) {
@@ -539,29 +524,11 @@ function doPrestige() {
     if(gain.lt(1)) return;
     if(confirm("本社へ栄転しますか？\n(伝説度を獲得し、リセットします)")) {
         game.prestigePoints = game.prestigePoints.plus(gain); game.prestigeCount++;
-        // 転生時の引き継ぎ処理
-        let savedPoints = game.prestigePoints;
-        let savedCount = game.prestigeCount;
-        let savedLegacy = [...game.legacyUpgrades];
-        let savedTotalPaper = game.totalPaper;
-        
-        // 黄金のパラシュート効果
-        let startPaper = new D(0);
-        if(savedLegacy.includes("l_parachute")) startPaper = game.paper.times(0.01);
-
+        let savedPoints = game.prestigePoints; let savedCount = game.prestigeCount; let savedLegacy = [...game.legacyUpgrades]; let savedTotalPaper = game.totalPaper;
+        let startPaper = new D(0); if(savedLegacy.includes("l_parachute")) startPaper = game.paper.times(0.01);
         initNewGame();
-        game.prestigePoints = savedPoints;
-        game.prestigeCount = savedCount;
-        game.legacyUpgrades = savedLegacy;
-        game.totalPaper = savedTotalPaper;
-        game.paper = startPaper;
-
-        // コネ入社効果
-        if(savedLegacy.includes("l_nepotism")) {
-            if(game.facilities[0]) game.facilities[0].owned = 10;
-            if(game.facilities[1]) game.facilities[1].owned = 10;
-        }
-
+        game.prestigePoints = savedPoints; game.prestigeCount = savedCount; game.legacyUpgrades = savedLegacy; game.totalPaper = savedTotalPaper; game.paper = startPaper;
+        if(savedLegacy.includes("l_nepotism")) { if(game.facilities[0]) game.facilities[0].owned = 10; if(game.facilities[1]) game.facilities[1].owned = 10; }
         saveGame(); location.reload();
     }
 }
@@ -577,9 +544,7 @@ function processOfflineProgress() {
     if(diff>10){
         let cps = calculateCPS(true);
         if(game.isScandal) cps=cps.times(0.2);
-        // レガシー効果：クロノストリガー（100%効率）
-        if(!hasLegacy("l_chronos")) cps = cps.times(0.5); // 通常は50%効率
-        
+        if(!hasLegacy("l_chronos")) cps = cps.times(0.5);
         const earn = cps.times(diff);
         if(earn.gt(0)){
             game.paper=game.paper.plus(earn); game.totalPaper=game.totalPaper.plus(earn);
@@ -598,12 +563,12 @@ function exportSave(){ saveGame(); prompt("コピー", btoa(localStorage.getItem
 function importSave(){ try{ const d=atob(prompt("貼り付け")); JSON.parse(d); localStorage.setItem("mugenRingiSave",d); location.reload(); }catch(e){alert("失敗");} }
 function hardReset(){ if(confirm("全消去しますか？")){ localStorage.removeItem("mugenRingiSave"); location.reload(); } }
 function updateNews() { const c=document.getElementById("news-ticker-content"); if(!c)return; c.innerText=NEWS_DATA[Math.floor(Math.random()*NEWS_DATA.length)]; c.style.animation='none'; c.offsetHeight; c.style.animation='ticker 20s linear infinite'; }
-function resetGoldenTimer() { goldenDocTimer = 120 + Math.random()*180; if(hasLegacy("l_insider")) goldenDocTimer *= 0.9; } // インサイダー効果
+function resetGoldenTimer() { goldenDocTimer = 120 + Math.random()*180; if(hasLegacy("l_insider")) goldenDocTimer *= 0.9; }
 function spawnGoldenDoc() { const d=document.getElementById("golden-doc"); if(!d)return; d.style.left=(50+Math.random()*(window.innerWidth-150))+"px"; d.style.top=(100+Math.random()*(window.innerHeight-200))+"px"; d.style.display="flex"; setTimeout(()=>{d.style.display="none";},15000); }
 function clickGoldenDoc() { 
     const d=document.getElementById("golden-doc"); d.style.display="none"; 
     const t=Math.floor(Math.random()*4); let m=""; const now=Date.now();
-    let timeMul = hasLegacy("l_zone") ? 2.0 : 1.0; // ゾーン効果
+    let timeMul = hasLegacy("l_zone") ? 2.0 : 1.0;
     if(t===0){ activeBuffs.productionMultiplier=7; activeBuffs.endTime=now+(77000*timeMul); m="【特別決済】生産7倍"; }
     else if(t===1){ activeBuffs.clickMultiplier=777; activeBuffs.endTime=now+(13000*timeMul); m="【特別決済】クリック777倍"; }
     else if(t===2){ let gain=calculateCPS(true).times(900); if(gain.eq(0))gain=new D(1000); game.paper=game.paper.plus(gain); game.totalPaper=game.totalPaper.plus(gain); m=`【特別決済】${formatNumber(gain)}枚獲得`; }
