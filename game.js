@@ -1,15 +1,14 @@
-/* --- 無限稟議 ゲームロジック (Ver 5.1: Achievements Expansion) --- */
+/* --- 無限稟議 ゲームロジック (Ver 6.0: Quality of Life Update) --- */
 
-// 巨大数ライブラリのショートカット
 const D = Decimal;
 
-// 単位リスト (10^3から10^63まで対応)
+// 単位リスト
 const SUFFIXES = [
     "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc",
     "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg"
 ];
 
-// ゲームデータ初期値
+// ゲームデータ
 let game = {
     paper: new D(0),
     totalPaper: new D(0),
@@ -17,8 +16,8 @@ let game = {
     totalClicks: 0,
     prestigeCount: 0,
     startTime: Date.now(),
+    lastSaveTime: Date.now(), // ★オフライン計算用
 
-    // 施設データ
     facilities: [
         { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, owned: 0, desc: "スマホ片手に作業します。" },
         { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, owned: 0, desc: "ガシャンガシャン。" },
@@ -28,7 +27,6 @@ let game = {
         { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, owned: 0, desc: "バイオ技術で書類を栽培。" },
     ],
 
-    // アップグレードデータ
     upgrades: [
         { id: "u0_1", name: "エルゴノミクス椅子", cost: 1000, targetId: 0, scale: 2, purchased: false, req: 10, desc: "アルバイト効率2倍" },
         { id: "u0_2", name: "エナジードリンク", cost: 50000, targetId: 0, scale: 2, purchased: false, req: 50, desc: "アルバイト効率さらに2倍" },
@@ -38,63 +36,45 @@ let game = {
         { id: "click_1", name: "重厚なハンコ", cost: 500, targetId: -1, scale: 10, purchased: false, req: 1, desc: "クリック効率10倍" },
     ],
 
-    // 実績データ（大幅拡張）
     achievements: [
-        // --- クリック・基本系 ---
         { id: "ach_1", name: "初めの一歩", desc: "ハンコを1回押す", unlocked: false, check: g => g.totalClicks >= 1 },
         { id: "ach_2", name: "腱鞘炎予備軍", desc: "ハンコを1,000回押す", unlocked: false, check: g => g.totalClicks >= 1000 },
         { id: "ach_click_3", name: "指先の達人", desc: "ハンコを10,000回押す", unlocked: false, check: g => g.totalClicks >= 10000 },
-        
-        // --- 施設数（合計）系 ---
         { id: "ach_3", name: "小さなチーム", desc: "施設を合計10個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 10 },
         { id: "ach_4", name: "課の設立", desc: "施設を合計50個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 50 },
         { id: "ach_5", name: "ブラック企業", desc: "施設を合計100個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 100 },
         { id: "ach_fac_4", name: "中堅企業", desc: "施設を合計200個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 200 },
         { id: "ach_fac_5", name: "大企業", desc: "施設を合計300個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 300 },
-
-        // --- 金額（累計枚数）系 ---
         { id: "ach_6", name: "100万円の壁", desc: "累計で1M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1000000) },
         { id: "ach_7", name: "億り人", desc: "累計で100M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(100000000) },
         { id: "ach_8", name: "兆万長者", desc: "累計で1T枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e12) },
-        { id: "ach_money_4", name: "国家予算規模", desc: "累計で1Qa(1000兆)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e15) },
-        { id: "ach_money_5", name: "天文学的数字", desc: "累計で1Qi(100京)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e18) },
-        { id: "ach_money_6", name: "宇宙の塵", desc: "累計で1Sx(10垓)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e21) },
-
-        // --- 特定施設（深掘り）系 ---
+        { id: "ach_money_4", name: "国家予算規模", desc: "累計で1Qa枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e15) },
+        { id: "ach_money_5", name: "天文学的数字", desc: "累計で1Qi枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e18) },
+        { id: "ach_money_6", name: "宇宙の塵", desc: "累計で1Sx枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e21) },
         { id: "ach_9", name: "バイトリーダー", desc: "アルバイトを50人雇う", unlocked: false, check: g => g.facilities[0].owned >= 50 },
         { id: "ach_part_2", name: "人海戦術", desc: "アルバイトを100人雇う", unlocked: false, check: g => g.facilities[0].owned >= 100 },
-        
-        { id: "ach_10", name: "自動化推進", desc: "自動捺印機を50台導入", unlocked: false, check: g => g.facilities[1].owned >= 50 },
-        { id: "ach_stamp_2", name: "産業革命", desc: "自動捺印機を100台導入", unlocked: false, check: g => g.facilities[1].owned >= 100 },
-
-        { id: "ach_vet_1", name: "歴戦の勇士", desc: "ベテラン社員を50人雇う", unlocked: false, check: g => g.facilities[2].owned >= 50 },
-        { id: "ach_vet_2", name: "社畜の鑑", desc: "ベテラン社員を100人雇う", unlocked: false, check: g => g.facilities[2].owned >= 100 },
-
-        { id: "ach_cloud_1", name: "サーバー負荷増大", desc: "クラウドワーカーを50人確保", unlocked: false, check: g => g.facilities[3].owned >= 50 },
-        { id: "ach_cloud_2", name: "分散処理ネットワーク", desc: "クラウドワーカーを100人確保", unlocked: false, check: g => g.facilities[3].owned >= 100 },
-
-        { id: "ach_ai_1", name: "シンギュラリティ", desc: "承認AIを50台稼働", unlocked: false, check: g => g.facilities[4].owned >= 50 },
-        { id: "ach_bio_1", name: "マッドサイエンティスト", desc: "書類養殖場を50箇所建設", unlocked: false, check: g => g.facilities[5].owned >= 50 },
-
-        // --- システム・転生系 ---
+        { id: "ach_10", name: "自動化推進", desc: "捺印機を50台導入", unlocked: false, check: g => g.facilities[1].owned >= 50 },
+        { id: "ach_stamp_2", name: "産業革命", desc: "捺印機を100台導入", unlocked: false, check: g => g.facilities[1].owned >= 100 },
+        { id: "ach_vet_1", name: "歴戦の勇士", desc: "ベテランを50人雇う", unlocked: false, check: g => g.facilities[2].owned >= 50 },
+        { id: "ach_vet_2", name: "社畜の鑑", desc: "ベテランを100人雇う", unlocked: false, check: g => g.facilities[2].owned >= 100 },
+        { id: "ach_cloud_1", name: "サーバー負荷増大", desc: "クラウド50人確保", unlocked: false, check: g => g.facilities[3].owned >= 50 },
+        { id: "ach_cloud_2", name: "分散処理NW", desc: "クラウド100人確保", unlocked: false, check: g => g.facilities[3].owned >= 100 },
+        { id: "ach_ai_1", name: "シンギュラリティ", desc: "AIを50台稼働", unlocked: false, check: g => g.facilities[4].owned >= 50 },
+        { id: "ach_bio_1", name: "マッドサイエンティスト", desc: "養殖場を50箇所建設", unlocked: false, check: g => g.facilities[5].owned >= 50 },
         { id: "ach_11", name: "効率厨", desc: "アップグレードを3つ購入", unlocked: false, check: g => g.upgrades.filter(u => u.purchased).length >= 3 },
         { id: "ach_upg_2", name: "完全武装", desc: "アップグレードを6つ購入", unlocked: false, check: g => g.upgrades.filter(u => u.purchased).length >= 6 },
-        
         { id: "ach_12", name: "伝説の始まり", desc: "初めて栄転を行う", unlocked: false, check: g => g.prestigeCount >= 1 },
         { id: "ach_pres_2", name: "転生中毒", desc: "栄転を3回行う", unlocked: false, check: g => g.prestigeCount >= 3 },
         { id: "ach_pres_3", name: "輪廻の果て", desc: "栄転を5回行う", unlocked: false, check: g => g.prestigeCount >= 5 },
-        
-        // --- 秘密の実績（条件隠し） ---
-        { id: "ach_sec_1", name: "カチカチ山", desc: "【隠し】1秒間に10回以上クリックする", unlocked: false, check: g => clickRateCheck() },
+        { id: "ach_sec_1", name: "カチカチ山", desc: "【隠し】1秒間に10回クリック", unlocked: false, check: g => clickRateCheck() },
     ]
 };
 
-// アニメーション管理変数
 let lastFrameTime = Date.now();
-// クリックレート計測用
 let clickTimestamps = [];
+let buyMode = 1; // 1, 10, 100, "MAX"
 
-/* --- 初期化とロード --- */
+/* --- 初期化 --- */
 function loadGame() {
     const saved = localStorage.getItem("mugenRingiSave");
     if (saved) {
@@ -105,6 +85,8 @@ function loadGame() {
             game.prestigePoints = parsed.prestigePoints ? new D(parsed.prestigePoints) : new D(0);
             game.totalClicks = parsed.totalClicks || 0;
             game.prestigeCount = parsed.prestigeCount || 0;
+            // ★前回セーブ時刻の復元
+            game.lastSaveTime = parsed.lastSaveTime || Date.now();
 
             game.facilities.forEach((f, i) => {
                 if (parsed.facilities && parsed.facilities[i]) f.owned = parsed.facilities[i].owned;
@@ -121,6 +103,10 @@ function loadGame() {
                     if (savedAch) a.unlocked = savedAch.unlocked;
                 });
             }
+
+            // ★オフライン進行の計算
+            processOfflineProgress();
+
         } catch (e) {
             console.error("Load Error", e);
         }
@@ -128,11 +114,45 @@ function loadGame() {
     createFacilityUI();
     createUpgradeUI();
     createAchievementUI();
+    
+    // UI更新
+    updateBuyModeUI();
+
     lastFrameTime = Date.now();
     requestAnimationFrame(gameLoop);
 }
 
-/* --- UI生成関数 --- */
+/* --- ★新機能：オフライン進行処理 --- */
+function processOfflineProgress() {
+    const now = Date.now();
+    // ミリ秒を秒に変換
+    const diffSeconds = (now - game.lastSaveTime) / 1000;
+    
+    // 10秒以上経過していたら計算
+    if (diffSeconds > 10) {
+        // 現在のCPSを計算（まだgameLoopが回っていないので手動計算）
+        const cps = calculateCPS();
+        
+        // 獲得量
+        const earned = cps.times(diffSeconds);
+        
+        if (earned.gt(0)) {
+            game.paper = game.paper.plus(earned);
+            game.totalPaper = game.totalPaper.plus(earned);
+            
+            // モーダル表示
+            document.getElementById("offline-time").innerText = formatNumber(diffSeconds);
+            document.getElementById("offline-earned").innerText = formatNumber(earned);
+            document.getElementById("offline-modal").style.display = "flex";
+        }
+    }
+}
+
+function closeModal() {
+    document.getElementById("offline-modal").style.display = "none";
+}
+
+/* --- UI生成 --- */
 function createFacilityUI() {
     const container = document.getElementById("facilities-container");
     container.innerHTML = "";
@@ -194,13 +214,81 @@ function createAchievementUI() {
     });
 }
 
+/* --- 計算ロジック --- */
+// 現在のCPS（秒間生産量）を計算して返す
+function calculateCPS() {
+    const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    const unlockedCount = game.achievements.filter(a => a.unlocked).length;
+    const achievementBonus = Math.pow(1.04, unlockedCount);
+    
+    let multipliers = {};
+    game.facilities.forEach(f => {
+        multipliers[f.id] = new D(prestigeBonus).times(achievementBonus);
+    });
+    game.upgrades.forEach(u => {
+        if (u.purchased && u.targetId >= 0) multipliers[u.targetId] = multipliers[u.targetId].times(u.scale);
+    });
+
+    let cps = new D(0);
+    game.facilities.forEach(f => {
+        let singleProd = new D(f.baseProd).times(multipliers[f.id]);
+        cps = cps.plus(singleProd.times(f.owned));
+    });
+    return cps;
+}
+
+// ★新機能：まとめ買いのコスト計算
+// return: { cost: Decimal, amount: Number }
+function getBulkCost(facility, mode) {
+    const base = new D(facility.baseCost);
+    const r = 1.15;
+    const k = facility.owned;
+    let n = 0;
+
+    if (mode === 'MAX') {
+        // 最大購入可能数を計算
+        // Cost = base * r^k * (r^n - 1) / (r - 1) <= paper
+        // これをnについて解くのは大変なので、break_infinityの対数を使うか、簡易シミュレーション
+        // ここでは数学的に解く
+        // paper * (r-1) / (base * r^k) + 1 = r^n
+        // n = log_r ( ... )
+        
+        // r=1.15の場合の正確な計算
+        if (game.paper.lt(base.times(Math.pow(r, k)))) {
+            return { cost: base.times(Math.pow(r, k)), amount: 0 }; // 1個も買えない
+        }
+        
+        // 対数計算 (log(x) / log(1.15))
+        let term = game.paper.times(r - 1).div(base.times(Math.pow(r, k))).plus(1);
+        n = Math.floor(term.log10() / Math.log10(r));
+        
+        // 念のためn=0なら、所持金不足
+        if (n < 0) n = 0;
+        
+        // 上限キャップ（処理落ち防止で一度に1000個までとかにしてもいいが、今回は制限なし）
+    } else {
+        n = mode;
+    }
+
+    // 等比数列の和の公式: Sum = a * (r^n - 1) / (r - 1)
+    // ここで初項 a = base * r^k
+    
+    if (n === 0) return { cost: new D(0), amount: 0 };
+
+    let firstTerm = base.times(Math.pow(r, k));
+    let totalCost = firstTerm.times(Math.pow(r, n) - 1).div(r - 1);
+    
+    return { cost: totalCost, amount: n };
+}
+
+
 /* --- メインループ --- */
 function gameLoop() {
     const now = Date.now();
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    // 1. 倍率計算
+    // 倍率計算関連
     const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
     const achievementBonus = Math.pow(1.04, unlockedCount);
@@ -217,12 +305,11 @@ function gameLoop() {
     game.facilities.forEach(f => {
         multipliers[f.id] = new D(prestigeBonus).times(achievementBonus);
     });
-
     game.upgrades.forEach(u => {
         if (u.purchased && u.targetId >= 0) multipliers[u.targetId] = multipliers[u.targetId].times(u.scale);
     });
 
-    // 2. 生産処理
+    // 生産処理
     let cps = new D(0);
     game.facilities.forEach((f, i) => {
         let singleProd = new D(f.baseProd).times(multipliers[f.id]);
@@ -241,7 +328,7 @@ function gameLoop() {
         game.totalPaper = game.totalPaper.plus(earned);
     }
 
-    // 3. UI更新
+    // UI更新
     document.getElementById("counter").innerText = formatNumber(game.paper);
     document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
     updateButtons();
@@ -252,14 +339,34 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-/* --- ボタン更新 --- */
+/* --- UI更新 --- */
 function updateButtons() {
     game.facilities.forEach((f, i) => {
-        const cost = getCost(f);
+        // ★変更：まとめ買いコストを計算して表示
+        const bulk = getBulkCost(f, buyMode);
+        
         document.getElementById(`owned-${i}`).innerText = f.owned;
-        document.getElementById(`cost-${i}`).innerText = formatNumber(cost);
-        document.getElementById(`btn-${i}`).disabled = game.paper.lt(cost);
+        
+        const btn = document.getElementById(`btn-${i}`);
+        
+        if (buyMode === 'MAX') {
+            // MAXモード時の表示: "雇用 +12 (1.5M枚)" みたいな感じ
+            if (bulk.amount > 0) {
+                btn.innerHTML = `雇用 +${formatNumber(bulk.amount)}<br><span style="font-size:10px">${formatNumber(bulk.cost)}</span>`;
+                btn.disabled = false;
+            } else {
+                // 1個も買えない場合、次の1個の価格を表示
+                const nextCost = new D(f.baseCost).times(Math.pow(1.15, f.owned));
+                btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
+                btn.disabled = true;
+            }
+        } else {
+            // 通常モード(x1, x10...)
+            btn.innerHTML = `雇用 +${buyMode}<br><span id="cost-${i}">${formatNumber(bulk.cost)}</span>`;
+            btn.disabled = game.paper.lt(bulk.cost);
+        }
     });
+
     game.upgrades.forEach((u, i) => {
         const box = document.getElementById(`upg-box-${i}`);
         const btn = document.getElementById(`upg-btn-${i}`);
@@ -275,22 +382,33 @@ function updateButtons() {
     });
 }
 
-/* --- アクション関数 --- */
+// ★新機能：モード切り替え
+function setBuyMode(mode) {
+    buyMode = mode;
+    updateBuyModeUI();
+}
+
+function updateBuyModeUI() {
+    // ボタンの色を変える
+    ['1', '10', '100', 'max'].forEach(m => {
+        const btn = document.getElementById(`mode-${m}`);
+        if (btn) btn.className = "mode-btn";
+    });
+    const activeId = (buyMode === 'MAX') ? 'max' : buyMode;
+    document.getElementById(`mode-${activeId}`).className = "mode-btn active";
+}
+
+/* --- アクション --- */
 function clickStamp(event) {
     game.totalClicks++;
-    
-    // クリックレート計測（隠し実績用）
     const now = Date.now();
     clickTimestamps.push(now);
-    // 1秒以上前の履歴を消す
     clickTimestamps = clickTimestamps.filter(t => now - t < 1000);
 
     let clickPower = new D(1);
-
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
     const achievementBonus = Math.pow(1.04, unlockedCount);
     const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-
     clickPower = clickPower.times(prestigeBonus).times(achievementBonus);
 
     const upg = game.upgrades.find(u => u.id === "click_1");
@@ -301,17 +419,18 @@ function clickStamp(event) {
     spawnFloatingText(event, "+" + formatNumber(clickPower));
 }
 
-// 隠し実績チェック関数
 function clickRateCheck() {
-    return clickTimestamps.length >= 10; // 1秒間に10回クリック
+    return clickTimestamps.length >= 10;
 }
 
+// ★変更：まとめ買い対応
 function buyFacility(index) {
     const f = game.facilities[index];
-    const cost = getCost(f);
-    if (game.paper.gte(cost)) {
-        game.paper = game.paper.minus(cost);
-        f.owned++;
+    const bulk = getBulkCost(f, buyMode);
+    
+    if (bulk.amount > 0 && game.paper.gte(bulk.cost)) {
+        game.paper = game.paper.minus(bulk.cost);
+        f.owned += bulk.amount;
     }
 }
 
@@ -336,11 +455,7 @@ function switchTab(tabName) {
     if (tabName === 'achievements') btns[2].className += ' active';
 }
 
-/* --- ユーティリティ & システム --- */
-function getCost(facility) {
-    return new D(facility.baseCost).times(new D(1.15).pow(facility.owned));
-}
-
+/* --- システム --- */
 function formatNumber(n) {
     n = new D(n);
     if (n.lt(1000000)) return n.toNumber().toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -372,7 +487,6 @@ function getTotalFacilities(g) {
     return g.facilities.reduce((sum, f) => sum + f.owned, 0);
 }
 
-/* --- 実績・転生・セーブ処理 --- */
 function checkAchievements() {
     game.achievements.forEach((a, index) => {
         if (!a.unlocked && a.check(game)) {
@@ -407,7 +521,6 @@ function checkPrestige() {
     let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
     const gain = potential.minus(game.prestigePoints);
     const btn = document.getElementById("do-prestige-btn");
-
     if (gain.gte(1)) {
         btn.style.display = "block";
         document.getElementById("prestige-gain").innerText = formatNumber(gain);
@@ -420,9 +533,7 @@ function doPrestige() {
     const threshold = 1000000;
     let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
     const gain = potential.minus(game.prestigePoints);
-
     if (gain.lt(1)) return;
-
     if (confirm(`本社へ栄転しますか？\n\n伝説度 +${formatNumber(gain)} を獲得します。`)) {
         game.prestigePoints = game.prestigePoints.plus(gain);
         game.prestigeCount++;
@@ -441,6 +552,7 @@ function saveGame() {
         prestigePoints: game.prestigePoints.toString(),
         totalClicks: game.totalClicks,
         prestigeCount: game.prestigeCount,
+        lastSaveTime: Date.now(), // ★保存時刻を記録
         facilities: game.facilities.map(f => ({ owned: f.owned })),
         upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased })),
         achievements: game.achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
@@ -448,7 +560,6 @@ function saveGame() {
     localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
 }
 
-/* --- データ管理（インポート・エクスポート） --- */
 function exportSave() {
     saveGame();
     const saved = localStorage.getItem("mugenRingiSave");
@@ -477,7 +588,6 @@ function hardReset() {
     }
 }
 
-// ゲーム起動
 window.onload = function() {
     loadGame();
 };
