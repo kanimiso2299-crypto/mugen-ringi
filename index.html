@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>無限稟議 - MUGEN RINGI (Ver.8.0)</title>
+    <title>無限稟議 - MUGEN RINGI (Ver.9.0)</title>
     <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- ★新機能：ニュースティッカー -->
     <div id="news-ticker-container">
         <div id="news-ticker-content">読み込み中...</div>
     </div>
 
-    <!-- 炎上時の赤画面エフェクト -->
     <div id="scandal-overlay" style="display: none;">
         <div class="scandal-alert">
             <h1>⚠ 不祥事発覚 ⚠</h1>
@@ -28,7 +26,6 @@
         </div>
     </div>
 
-    <!-- ★新機能：ゴールデン書類（特別決済） -->
     <div id="golden-doc" onclick="clickGoldenDoc()" style="display: none;">
         <div class="golden-glow"></div>
         <div class="golden-icon">🈪</div>
@@ -37,7 +34,6 @@
 
     <!-- 左側：作業エリア -->
     <div id="work-area">
-        <!-- リスクゲージ -->
         <div id="risk-container">
             <div style="display:flex; justify-content:space-between; font-size:12px; color:#d32f2f; font-weight:bold;">
                 <span>リスク(Risk)</span>
@@ -48,7 +44,7 @@
         </div>
 
         <div id="bonus-display">実績ボーナス: 0%</div>
-        <div id="buff-display" style="display:none;"></div> <!-- バフ表示用 -->
+        <div id="buff-display" style="display:none;"></div>
         <div id="prestige-display">★ 社内伝説度: 0 (+0%)</div>
         
         <h1>【 未処理書類 】</h1>
@@ -68,7 +64,7 @@
                     次の伝説度まで: あと 0 枚
                 </div>
                 <button id="do-prestige-btn" class="prestige-btn" onclick="doPrestige()">
-                    本社へ栄転する (+<span id="prestige-gain">0</span> P)
+                    本社へ栄転する (+<span id="prestige-gain">0</span> LP)
                 </button>
             </div>
 
@@ -88,6 +84,7 @@
             <button class="tab-btn active" onclick="switchTab('facilities')">設備</button>
             <button class="tab-btn" onclick="switchTab('upgrades')">改善</button>
             <button class="tab-btn" onclick="switchTab('risk')">リスク</button>
+            <button class="tab-btn" onclick="switchTab('legacy')" id="tab-legacy-btn" style="display:none; color:#9c27b0;">裏役員</button>
             <button class="tab-btn" onclick="switchTab('achievements')">実績</button>
         </div>
 
@@ -104,9 +101,7 @@
         </div>
 
         <div id="upgrades-tab" class="scroll-content" style="display:none;">
-            <div id="upgrades-container">
-                <p style="padding:10px; color:#999; font-size:12px;">条件を満たすと出現します</p>
-            </div>
+            <div id="upgrades-container"></div>
         </div>
 
         <div id="risk-tab" class="scroll-content" style="display:none;">
@@ -114,6 +109,17 @@
                 ※危険な施設を持つとリスクが上昇します。<br>100%で炎上し生産激減。
             </div>
             <div id="risk-shop-container"></div>
+        </div>
+
+        <!-- ★新タブ：レガシーショップ -->
+        <div id="legacy-tab" class="scroll-content" style="display:none;">
+            <div style="padding:10px; background:#f3e5f5; font-size:12px; color:#6a1b9a; margin-bottom:10px; border:1px solid #ba68c8;">
+                <b>【裏・役員室】</b><br>
+                伝説度(LP)を消費して、世界のルールを書き換えます。<br>
+                <span style="font-size:10px;">※消費したLP分の生産ボーナスは失われます。</span><br>
+                所持LP: <span id="legacy-points-display" style="font-weight:bold;">0</span>
+            </div>
+            <div id="legacy-shop-container"></div>
         </div>
         
         <div id="achievements-tab" class="scroll-content" style="display:none;">
@@ -135,6 +141,8 @@
         </div>
     </div>
 
-    <script src="game.js?v=8.0"></script>
+    <!-- ★重要：データの読み込み順序 -->
+    <script src="data.js?v=9.0"></script>
+    <script src="game.js?v=9.0"></script>
 </body>
 </html>
