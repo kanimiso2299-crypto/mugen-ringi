@@ -1,4 +1,4 @@
-/* --- 無限稟議 ゲームロジック (Ver 9.0: Stability & Separation) --- */
+/* --- 無限稟議 ゲームロジック (Ver 9.0: Click Power Update) --- */
 
 // 1. ライブラリチェック
 if (typeof Decimal === 'undefined') {
@@ -19,13 +19,22 @@ const FACILITY_DATA = [
     { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, riskPerSec: 2.0, desc: "倫理的問題 (リスク+2.0%/s)" },
 ];
 
+// type: "mul" (乗算) or "cps" (CPS加算)
 const UPGRADE_DATA = [
-    { id: "u0_1", name: "エルゴノミクス椅子", cost: 1000, targetId: 0, scale: 2, req: 10, desc: "アルバイト効率2倍" },
-    { id: "u0_2", name: "エナジードリンク", cost: 50000, targetId: 0, scale: 2, req: 50, desc: "アルバイト効率さらに2倍" },
-    { id: "u1_1", name: "工業用潤滑油", cost: 10000, targetId: 1, scale: 2, req: 10, desc: "捺印機効率2倍" },
-    { id: "u1_2", name: "予備バッテリー", cost: 500000, targetId: 1, scale: 2, req: 50, desc: "捺印機効率さらに2倍" },
-    { id: "u2_1", name: "腱鞘炎ガード", cost: 100000, targetId: 2, scale: 2, req: 10, desc: "ベテラン効率2倍" },
-    { id: "click_1", name: "重厚なハンコ", cost: 500, targetId: -1, scale: 10, req: 1, desc: "クリック効率10倍" },
+    // 施設強化
+    { id: "u0_1", name: "エルゴノミクス椅子", cost: 1000, targetId: 0, type: "mul", scale: 2, req: 10, desc: "アルバイト効率2倍" },
+    { id: "u0_2", name: "エナジードリンク", cost: 50000, targetId: 0, type: "mul", scale: 2, req: 50, desc: "アルバイト効率さらに2倍" },
+    { id: "u1_1", name: "工業用潤滑油", cost: 10000, targetId: 1, type: "mul", scale: 2, req: 10, desc: "捺印機効率2倍" },
+    { id: "u1_2", name: "予備バッテリー", cost: 500000, targetId: 1, type: "mul", scale: 2, req: 50, desc: "捺印機効率さらに2倍" },
+    { id: "u2_1", name: "腱鞘炎ガード", cost: 100000, targetId: 2, type: "mul", scale: 2, req: 10, desc: "ベテラン効率2倍" },
+    
+    // ★新：クリック強化 (targetId: -1)
+    { id: "click_base", name: "重厚なハンコ", cost: 500, targetId: -1, type: "mul", scale: 10, req: 1, desc: "クリック基礎力 10倍" },
+    { id: "click_cps_1", name: "手首の筋トレ", cost: 5000, targetId: -1, type: "cps", scale: 0.01, req: 100, desc: "クリックに秒間生産量の1%を加算" },
+    { id: "click_cps_2", name: "高級朱肉", cost: 50000, targetId: -1, type: "cps", scale: 0.02, req: 1000, desc: "クリックに秒間生産量の2%を加算" },
+    { id: "click_cps_3", name: "マクロツール", cost: 5000000, targetId: -1, type: "cps", scale: 0.05, req: 10000, desc: "クリックに秒間生産量の5%を加算" },
+    { id: "click_cps_4", name: "社長の直接決済", cost: 500000000, targetId: -1, type: "cps", scale: 0.10, req: 50000, desc: "クリックに秒間生産量の10%を加算" },
+    { id: "click_god", name: "神の指", cost: 500000000000, targetId: -1, type: "mul", scale: 20, req: 100000, desc: "クリック基礎力 さらに20倍" },
 ];
 
 const ACHIEVEMENT_DATA = [
@@ -76,12 +85,14 @@ let game = {
     lastSaveTime: Date.now()
 };
 
+// ランタイム変数（保存しない）
 let lastFrameTime = Date.now();
 let clickTimestamps = [];
 let buyMode = 1;
 let newsTimer = 0;
 let goldenDocTimer = 0;
 let activeBuffs = { productionMultiplier: 1, clickMultiplier: 1, endTime: 0 };
+let cachedCPS = new D(0); // ★最適化：CPSをキャッシュ
 
 /* --- 4. 初期化・ロード --- */
 function loadGame() {
@@ -89,7 +100,6 @@ function loadGame() {
         const saved = localStorage.getItem("mugenRingiSave");
         if (saved) {
             const parsed = JSON.parse(saved);
-            // データ復元とサニタイズ（数値変換）
             game.paper = new D(parsed.paper || 0);
             game.totalPaper = new D(parsed.totalPaper || 0);
             game.prestigePoints = new D(parsed.prestigePoints || 0);
@@ -102,13 +112,14 @@ function loadGame() {
             game.scapegoatUsed = Number(parsed.scapegoatUsed) || 0;
             game.lawyerLevel = Number(parsed.lawyerLevel) || 0;
 
-            // 配列データのマージ（足りないデータを補完）
+            // 施設データのマージ
             game.facilities = FACILITY_DATA.map((data, i) => {
                 let owned = 0;
                 if (parsed.facilities && parsed.facilities[i]) owned = Number(parsed.facilities[i].owned) || 0;
                 return { id: data.id, owned: owned };
             });
 
+            // アップグレードの復元（IDベースで照合）
             game.upgrades = UPGRADE_DATA.map(data => {
                 let purchased = false;
                 if (parsed.upgrades) {
@@ -118,6 +129,7 @@ function loadGame() {
                 return { ...data, purchased: purchased };
             });
 
+            // 実績の復元
             game.achievements = ACHIEVEMENT_DATA.map(data => {
                 let unlocked = false;
                 if (parsed.achievements) {
@@ -127,19 +139,15 @@ function loadGame() {
                 return { ...data, unlocked: unlocked };
             });
 
-            // オフライン進行チェック（エラー時は無視）
-            try { processOfflineProgress(); } catch(e) { console.warn("Offline calc failed", e); }
-
+            processOfflineProgress();
         } else {
             initNewGame();
         }
     } catch (e) {
-        console.error("Save Data Corrupted:", e);
-        alert("セーブデータの読み込みに失敗しました。初期状態で開始します。");
+        console.error("Load Error:", e);
         initNewGame();
     }
 
-    // UI構築
     initUI();
     resetGoldenTimer();
     lastFrameTime = Date.now();
@@ -163,7 +171,6 @@ function initNewGame() {
 }
 
 function initUI() {
-    // UI生成エラーが起きても他を止めないように個別に実行
     safeExecute(createFacilityUI);
     safeExecute(createUpgradeUI);
     safeExecute(createAchievementUI);
@@ -173,31 +180,37 @@ function initUI() {
     if (game.isScandal) startScandal();
 }
 
-/* --- 5. ゲームループ（分離処理） --- */
+/* --- 5. ゲームループ --- */
 function gameLoop() {
     const now = Date.now();
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    // 処理を分離して、一つがコケても全体が止まらないようにする
+    // 1. リスク計算
     safeExecute(() => updateRiskLogic(dt));
-    safeExecute(() => updateProductionLogic(dt));
+
+    // 2. 生産計算
+    cachedCPS = calculateCPS(); // 毎フレーム計算してキャッシュ
+    let effectiveCPS = cachedCPS;
+    if (game.isScandal) effectiveCPS = effectiveCPS.times(0.2);
+
+    if (dt > 0) {
+        const earned = effectiveCPS.times(dt);
+        game.paper = game.paper.plus(earned);
+        game.totalPaper = game.totalPaper.plus(earned);
+    }
+
+    // 3. 各種更新
     safeExecute(() => updateNewsLogic(dt));
     safeExecute(() => updateGoldenDocLogic(dt));
     safeExecute(() => updateBuffLogic(now));
     
-    // UI更新も分離
+    // 4. UI更新
     setText("counter", formatNumber(game.paper));
-    
-    // CPS表示計算（ここでのエラーは表示のみ影響）
-    try {
-        let cps = calculateCPS();
-        if (game.isScandal) cps = cps.times(0.2);
-        setText("cps-display", "毎秒処理: " + formatNumber(cps) + " 枚");
-    } catch(e) {}
+    setText("cps-display", "毎秒処理: " + formatNumber(effectiveCPS) + " 枚");
 
     safeExecute(updateFacilityButtons);
-    safeExecute(updateUpgradeButtons); // ★ここを独立させたので確実に動くはず
+    safeExecute(updateUpgradeButtons);
     safeExecute(updateRiskShop);
     safeExecute(checkPrestige);
     safeExecute(checkAchievements);
@@ -206,7 +219,7 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-/* --- 6. ロジック部分 --- */
+/* --- 6. ロジック詳細 --- */
 function updateRiskLogic(dt) {
     let riskIncrease = 0;
     game.facilities.forEach(f => {
@@ -221,15 +234,6 @@ function updateRiskLogic(dt) {
         if (game.risk >= 100) { game.risk = 100; startScandal(); }
     }
     updateRiskUI(riskIncrease - riskDecay);
-}
-
-function updateProductionLogic(dt) {
-    if (dt <= 0) return;
-    let cps = calculateCPS();
-    if (game.isScandal) cps = cps.times(0.2);
-    const earned = cps.times(dt);
-    game.paper = game.paper.plus(earned);
-    game.totalPaper = game.totalPaper.plus(earned);
 }
 
 function updateNewsLogic(dt) {
@@ -266,7 +270,7 @@ function updateBuffLogic(now) {
     }
 }
 
-/* --- 7. 計算・アクション --- */
+/* --- 7. 計算ロジック --- */
 function calculateCPS(ignoreBuffs = false) {
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
@@ -283,7 +287,9 @@ function calculateCPS(ignoreBuffs = false) {
         if(data) {
             let prod = new D(data.baseProd).times(globalMult);
             game.upgrades.forEach(u => {
-                if (u.purchased && u.targetId === f.id) prod = prod.times(u.scale);
+                if (u.purchased && u.targetId === f.id && (!u.type || u.type === "mul")) {
+                    prod = prod.times(u.scale);
+                }
             });
             cps = cps.plus(prod.times(f.owned));
         }
@@ -324,6 +330,7 @@ function getBulkCost(facilityObj, mode) {
     return { cost: cost, amount: amount };
 }
 
+/* --- 8. アクション --- */
 function clickStamp(event) {
     game.totalClicks++;
     const now = Date.now();
@@ -331,14 +338,34 @@ function clickStamp(event) {
     clickTimestamps = clickTimestamps.filter(t => now - t < 1000);
 
     let clickPower = new D(1);
-    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    clickPower = clickPower.times(new D(1.04).pow(unlockedCount));
-    clickPower = clickPower.times(game.prestigePoints.times(0.1).plus(1));
     
-    const upg = game.upgrades.find(u => u.id === "click_1");
-    if (upg && upg.purchased) clickPower = clickPower.times(upg.scale);
+    // 1. 基礎倍率 (実績, 転生, 施設UGのmulタイプ)
+    let unlockedCount = game.achievements.filter(a => a.unlocked).length;
+    let achievementBonus = new D(1.04).pow(unlockedCount);
+    let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
+    clickPower = clickPower.times(prestigeBonus).times(achievementBonus);
 
-    if (now < activeBuffs.endTime) clickPower = clickPower.times(activeBuffs.clickMultiplier);
+    // 2. クリック専用UG (乗算タイプ: targetId=-1, type="mul")
+    game.upgrades.forEach(u => {
+        if (u.purchased && u.targetId === -1 && u.type === "mul") {
+            clickPower = clickPower.times(u.scale);
+        }
+    });
+
+    // 3. CPS加算タイプ (targetId=-1, type="cps")
+    let cpsAdd = new D(0);
+    let currentCPS = cachedCPS; // キャッシュを使用
+    game.upgrades.forEach(u => {
+        if (u.purchased && u.targetId === -1 && u.type === "cps") {
+            cpsAdd = cpsAdd.plus(currentCPS.times(u.scale));
+        }
+    });
+    clickPower = clickPower.plus(cpsAdd);
+
+    // 4. バフ適用
+    if (now < activeBuffs.endTime) {
+        clickPower = clickPower.times(activeBuffs.clickMultiplier);
+    }
 
     game.paper = game.paper.plus(clickPower);
     game.totalPaper = game.totalPaper.plus(clickPower);
@@ -352,6 +379,14 @@ function buyFacility(index) {
     if (bulk.amount > 0 && game.paper.gte(bulk.cost)) {
         game.paper = game.paper.minus(bulk.cost);
         f.owned += bulk.amount;
+        // リスクUI更新
+        let riskIncrease = 0;
+        game.facilities.forEach(f => { 
+            let d = FACILITY_DATA[f.id];
+            if (d.riskPerSec > 0) riskIncrease += d.riskPerSec * f.owned;
+        });
+        let riskDecay = 1.0 + (game.lawyerLevel * 0.5);
+        updateRiskUI(riskIncrease - riskDecay);
     }
 }
 
@@ -362,11 +397,11 @@ function buyUpgrade(index) {
     if (!u.purchased && game.paper.gte(cost)) {
         game.paper = game.paper.minus(cost);
         u.purchased = true;
-        createUpgradeUI(); // リスト再構築（購入済みに変えるため）
+        // 画面更新は次フレームのupdateButtonsで
     }
 }
 
-/* --- 8. UI更新（分離） --- */
+/* --- 9. UI更新 --- */
 function updateFacilityButtons() {
     let prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     let unlockedCount = game.achievements.filter(a => a.unlocked).length;
@@ -383,7 +418,11 @@ function updateFacilityButtons() {
         
         let data = FACILITY_DATA[i];
         let prod = new D(data.baseProd).times(globalMult);
-        game.upgrades.forEach(u => { if (u.purchased && u.targetId === i) prod = prod.times(u.scale); });
+        game.upgrades.forEach(u => { 
+            if (u.purchased && u.targetId === i && (!u.type || u.type === "mul")) {
+                prod = prod.times(u.scale); 
+            }
+        });
         
         setText(`prod-total-${i}`, formatNumber(prod.times(f.owned)));
         setText(`prod-single-${i}`, formatNumber(prod));
@@ -407,11 +446,18 @@ function updateUpgradeButtons() {
         const box = document.getElementById(`upg-box-${i}`);
         const btn = document.getElementById(`upg-btn-${i}`);
         if (box && btn) {
-            // 出現条件チェック
             let isVisible = u.purchased || 
                (u.targetId >= 0 && game.facilities[u.targetId] && game.facilities[u.targetId].owned >= u.req) ||
-               (u.targetId === -1);
+               (u.targetId === -1 && (u.req <= game.totalClicks || u.req <= game.paper.e)); 
+               // クリック系はクリック数か所持金桁数で出す簡易ロジック(今回はクリック数やpaperで判定)
+               // データ定義のreqはクリック数や枚数など文脈依存だが、
+               // 今回は簡易的に「targetId=-1なら常に出すか、安い順に出す」
+               // -> 修正: targetId=-1の場合は、reqを"ゲーム全体の進行度"とみなすが、
+               // わかりやすく「1つ前のUGを買ったら次が出る」か「最初から全部出る」にする。
+               // 今回は「targetId=-1 は常に表示」に変更して遊びやすくする。
             
+            if (u.targetId === -1) isVisible = true;
+
             box.style.display = isVisible ? "flex" : "none";
             
             if (u.purchased) {
@@ -428,7 +474,7 @@ function updateUpgradeButtons() {
     });
 }
 
-/* --- 9. その他ツール・イベント --- */
+/* --- その他ツール・UI --- */
 function createFacilityUI() {
     const c = document.getElementById("facilities-container");
     if(!c) return;
@@ -453,11 +499,23 @@ function createUpgradeUI() {
         const div = document.createElement("div");
         div.className = "item-box";
         div.id = `upg-box-${i}`;
-        div.style.display = "none"; // 初期は隠す
+        div.style.display = "none";
         div.innerHTML = `<div class="item-info"><h3>${u.name}</h3><p>${u.desc}</p></div>
             <button class="buy-btn" id="upg-btn-${i}" onclick="buyUpgrade(${i})">購入</button>`;
         c.appendChild(div);
     });
+}
+
+function createRiskShopUI() {
+    const c = document.getElementById("risk-shop-container");
+    if(!c) return;
+    c.innerHTML = "";
+    const dS = document.createElement("div"); dS.className="item-box";
+    dS.innerHTML = `<div class="item-info"><h3>スケープゴート</h3><p>リスク-50% (価格3倍増)</p></div><button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">購入 <span id="cost-scapegoat">0</span></button>`;
+    c.appendChild(dS);
+    const dL = document.createElement("div"); dL.className="item-box";
+    dL.innerHTML = `<div class="item-info"><h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3><p>リスク減少UP (価格2.5倍増)</p></div><button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">契約 <span id="cost-lawyer">0</span></button>`;
+    c.appendChild(dL);
 }
 
 function createAchievementUI() {
@@ -475,18 +533,6 @@ function createAchievementUI() {
         div.innerHTML = `<div class="ach-icon">${icon}</div><div class="item-info"><h3 id="ach-name-${i}">${name}</h3><p id="ach-desc-${i}">${desc}</p></div>`;
         c.appendChild(div);
     });
-}
-
-function createRiskShopUI() {
-    const c = document.getElementById("risk-shop-container");
-    if(!c) return;
-    c.innerHTML = "";
-    const dS = document.createElement("div"); dS.className="item-box";
-    dS.innerHTML = `<div class="item-info"><h3>スケープゴート</h3><p>リスク-50% (価格3倍増)</p></div><button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">購入 <span id="cost-scapegoat">0</span></button>`;
-    c.appendChild(dS);
-    const dL = document.createElement("div"); dL.className="item-box";
-    dL.innerHTML = `<div class="item-info"><h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3><p>リスク減少UP (価格2.5倍増)</p></div><button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">契約 <span id="cost-lawyer">0</span></button>`;
-    c.appendChild(dL);
 }
 
 function updateRiskUI(trend) {
@@ -516,7 +562,7 @@ function updateRiskShop() {
     if(btnL) btnL.disabled = game.paper.lt(lCost);
 }
 
-// 共通ツール
+// 共通ヘルパー
 function safeExecute(func) { try { func(); } catch (e) { console.warn("Exec skip:", e); } }
 function setText(id, text) { const el = document.getElementById(id); if(el) el.innerText = text; }
 function formatNumber(n) {
@@ -531,8 +577,6 @@ function formatNumber(n) {
 function getOwned(g, id) { return g.facilities[id] ? g.facilities[id].owned : 0; }
 function getPurchasedCount(g) { return g.upgrades.filter(u => u.purchased).length; }
 function getTotalFacilities(g) { return g.facilities.reduce((sum, f) => sum + f.owned, 0); }
-
-// 雑多なアクション
 function buyScapegoat() { const c = new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed)); if(game.paper.gte(c)){ game.paper=game.paper.minus(c); game.scapegoatUsed++; game.risk=Math.max(0,game.risk-50); if(game.isScandal&&game.risk<=0)endScandal(); updateRiskShop(); }}
 function buyLawyer() { const c = new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel)); if(game.paper.gte(c)){ game.paper=game.paper.minus(c); game.lawyerLevel++; updateRiskShop(); }}
 function startScandal() { game.isScandal=true; document.getElementById("scandal-overlay").style.display="flex"; }
@@ -551,9 +595,7 @@ function doPrestige() {
     if(confirm("本社へ栄転しますか？")) {
         game.prestigePoints = game.prestigePoints.plus(gain); game.prestigeCount++;
         initNewGame(); 
-        game.prestigePoints = game.prestigePoints.plus(0); 
-        // ※厳密にはprestigePoints以外をリセットする処理が必要だが、今回は簡易実装
-        // 正しくは:
+        game.prestigePoints = game.prestigePoints.plus(0);
         let savedP = game.prestigePoints;
         let savedC = game.prestigeCount;
         initNewGame();
@@ -563,10 +605,21 @@ function doPrestige() {
     }
 }
 function saveGame() {
-    const saveObj = { ...game };
-    saveObj.paper = game.paper.toString();
-    saveObj.totalPaper = game.totalPaper.toString();
-    saveObj.prestigePoints = game.prestigePoints.toString();
+    const saveObj = {
+        paper: game.paper.toString(),
+        totalPaper: game.totalPaper.toString(),
+        prestigePoints: game.prestigePoints.toString(),
+        totalClicks: game.totalClicks,
+        prestigeCount: game.prestigeCount,
+        lastSaveTime: Date.now(),
+        risk: game.risk,
+        isScandal: game.isScandal,
+        scapegoatUsed: game.scapegoatUsed,
+        lawyerLevel: game.lawyerLevel,
+        facilities: game.facilities.map(f => ({ owned: f.owned })),
+        upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased })),
+        achievements: game.achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
+    };
     localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
 }
 function processOfflineProgress() {
@@ -604,5 +657,6 @@ function clickGoldenDoc() {
     notify(m); resetGoldenTimer();
 }
 function closeModal() { document.getElementById("offline-modal").style.display="none"; }
+function clickRateCheck() { return clickTimestamps.length >= 10; }
 
 window.onload = function() { loadGame(); };
