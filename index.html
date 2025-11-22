@@ -3,232 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>無限稟議 - MUGEN RINGI (Ver.4.1)</title>
+    <title>無限稟議 - MUGEN RINGI (Ver.5.0)</title>
+    <!-- 外部ライブラリの読み込み -->
     <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
-    
-    <style>
-        /* --- デザイン (CSS) --- */
-        body {
-            font-family: "MS Mincho", "Hiragino Mincho ProN", serif;
-            background-color: #f0f2f5;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            height: 100vh;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
-
-        /* 左エリア */
-        #work-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border-right: 2px solid #ccc;
-            padding-right: 20px;
-            position: relative;
-        }
-
-        /* 右エリア */
-        #right-panel {
-            flex: 1;
-            padding-left: 20px;
-            display: flex;
-            flex-direction: column;
-            background-color: #fff;
-            border-left: 1px solid #ddd;
-        }
-
-        /* タブメニュー */
-        .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 10px; }
-        .tab-btn { flex: 1; padding: 10px; cursor: pointer; background: #eee; border: none; font-weight: bold; color: #666; font-size: 12px; }
-        .tab-btn:hover { background-color: #e0e0e0; }
-        .tab-btn.active { background: #fff; color: #bf0000; border-bottom: 2px solid #bf0000; }
-
-        /* スクロールエリア */
-        .scroll-content { flex: 1; overflow-y: auto; padding-right: 5px; }
-
-        h1 { margin: 0; font-size: 24px; color: #444; }
-        
-        /* 情報表示系 */
-        #bonus-display {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            padding: 5px 15px;
-            border-radius: 4px;
-            font-size: 12px;
-            margin-bottom: 5px;
-            display: block;
-            border: 1px solid #c8e6c9;
-        }
-
-        #prestige-display {
-            background-color: #222;
-            color: #ffd700;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            margin-bottom: 10px;
-            display: none;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-
-        #counter {
-            font-size: 50px;
-            font-weight: bold;
-            margin: 10px 0;
-            font-family: 'Courier New', monospace;
-        }
-        #cps-display { font-size: 18px; color: #666; margin-bottom: 30px;}
-
-        /* ハンコボタン */
-        #stamp-btn {
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            border: 10px solid #bf0000;
-            background-color: #fff;
-            color: #bf0000;
-            font-size: 32px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.1s;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            user-select: none;
-        }
-        #stamp-btn:active { transform: scale(0.95); background-color: #ffe6e6; }
-
-        /* リストアイテム */
-        .item-box {
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 8px;
-            border-radius: 4px;
-            background-color: #f9f9f9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .item-box:hover { background-color: #eef; }
-        .item-box.bought { background-color: #dff0d8; opacity: 0.7; }
-
-        .item-info h3 { margin: 0 0 3px 0; font-size: 15px; }
-        .item-info p { margin: 0; font-size: 11px; color: #555; }
-        
-        /* 実績アイテム用スタイル */
-        .achievement-box {
-            border: 1px solid #ccc;
-            padding: 8px;
-            margin-bottom: 5px;
-            border-radius: 4px;
-            background-color: #eee;
-            color: #888;
-            display: flex;
-            align-items: center;
-        }
-        .achievement-box.unlocked {
-            background-color: #fff3e0;
-            border-color: #ffb74d;
-            color: #333;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .ach-icon { font-size: 20px; margin-right: 10px; width: 30px; text-align: center; }
-        
-        .buy-btn {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            min-width: 90px;
-            font-size: 11px;
-            text-align: center;
-        }
-        .buy-btn:disabled { background-color: #ccc; cursor: not-allowed; }
-        
-        .prestige-btn {
-            background-color: #333;
-            color: #ffd700;
-            border: 2px solid #ffd700;
-            padding: 10px;
-            width: 100%;
-            margin-top: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            display: none;
-        }
-        .prestige-btn:hover { background-color: #555; }
-
-        /* 演出 */
-        .click-effect {
-            position: absolute;
-            color: #bf0000;
-            font-weight: bold;
-            font-size: 24px;
-            pointer-events: none;
-            animation: floatUp 1s forwards;
-        }
-        @keyframes floatUp {
-            0% { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(-50px); }
-        }
-        
-        /* 通知ポップアップ */
-        #notification-area {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-        .notify-box {
-            background-color: #333;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-size: 14px;
-            animation: fadeOut 4s forwards;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-        @keyframes fadeOut {
-            0% { opacity: 0; transform: translateY(20px); }
-            10% { opacity: 1; transform: translateY(0); }
-            80% { opacity: 1; }
-            100% { opacity: 0; }
-        }
-
-    </style>
+    <!-- デザインファイル(CSS)の読み込み -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <!-- 左側：作業エリア -->
     <div id="work-area">
+        <!-- 情報表示 -->
         <div id="bonus-display">実績ボーナス: 0%</div>
         <div id="prestige-display">★ 社内伝説度: 0 (+0%)</div>
         
+        <!-- カウンター -->
         <h1>【 未処理書類 】</h1>
         <div id="counter">0</div>
         <div id="cps-display">毎秒処理: 0 枚</div>
         
+        <!-- メインボタン -->
         <button id="stamp-btn" onclick="clickStamp(event)">
             <span>承認</span>
             <span style="font-size:14px; margin-top:5px;">(CLICK)</span>
         </button>
         
-        <div style="margin-top:40px; width: 80%; text-align: center;">
-            <div id="system-msg" style="font-size:12px; color:#999; margin-bottom:10px;">自動保存中</div>
+        <!-- 設定・データ管理エリア -->
+        <div id="settings-area">
+            <div id="system-msg">自動保存中</div>
             
+            <!-- 栄転ボタン -->
             <button id="do-prestige-btn" class="prestige-btn" onclick="doPrestige()">
                 本社へ栄転する<br>
                 <span style="font-size:12px; font-weight:normal;">
@@ -236,9 +40,14 @@
                 </span>
             </button>
 
-            <button onclick="hardReset()" style="margin-top:20px; font-size:10px; color:#999; background:none; border:none; text-decoration:underline; cursor:pointer;">
-                [デバッグ用] 辞表提出（完全初期化）
-            </button>
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ccc;">
+
+            <!-- データ管理ボタン群 -->
+            <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
+                <button class="data-btn" onclick="exportSave()">データ書き出し</button>
+                <button class="data-btn" onclick="importSave()">データ読み込み</button>
+                <button class="data-btn danger" onclick="hardReset()">完全初期化</button>
+            </div>
         </div>
     </div>
 
@@ -250,19 +59,17 @@
             <button class="tab-btn" onclick="switchTab('achievements')">実績</button>
         </div>
 
-        <!-- 施設リスト -->
+        <!-- 各種リスト -->
         <div id="facilities-tab" class="scroll-content">
             <div id="facilities-container"></div>
         </div>
 
-        <!-- アップグレードリスト -->
         <div id="upgrades-tab" class="scroll-content" style="display:none;">
             <div id="upgrades-container">
                 <p style="padding:10px; color:#999; font-size:12px;">条件を満たすと出現します</p>
             </div>
         </div>
         
-        <!-- 実績リスト -->
         <div id="achievements-tab" class="scroll-content" style="display:none;">
             <div id="achievements-container"></div>
         </div>
@@ -271,408 +78,7 @@
     <!-- 通知エリア -->
     <div id="notification-area"></div>
 
-    <script>
-        /* --- JavaScript (Ver 4.1: Suffix Notation) --- */
-        const D = Decimal;
-
-        // ★単位リスト (10^3から10^63まで対応)
-        const SUFFIXES = [
-            "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", 
-            "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg"
-        ];
-
-        let game = {
-            paper: new D(0),
-            totalPaper: new D(0),
-            prestigePoints: new D(0),
-            totalClicks: 0,
-            prestigeCount: 0,
-            startTime: Date.now(),
-            
-            facilities: [
-                { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, owned: 0, desc: "スマホ片手に作業します。" },
-                { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, owned: 0, desc: "ガシャンガシャン。" },
-                { id: 2, name: "ベテラン社員", baseCost: 1100, baseProd: 22, owned: 0, desc: "残業は趣味です。" },
-                { id: 3, name: "クラウドワーカー", baseCost: 12000, baseProd: 85, owned: 0, desc: "顔の見えない労働力。" },
-                { id: 4, name: "承認AI Type-0", baseCost: 130000, baseProd: 350, owned: 0, desc: "空気を読んで承認します。" },
-                { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, owned: 0, desc: "バイオ技術で書類を栽培。" },
-            ],
-            upgrades: [
-                { id: "u0_1", name: "エルゴノミクス椅子", cost: 1000, targetId: 0, scale: 2, purchased: false, req: 10, desc: "アルバイト効率2倍" },
-                { id: "u0_2", name: "エナジードリンク", cost: 50000, targetId: 0, scale: 2, purchased: false, req: 50, desc: "アルバイト効率さらに2倍" },
-                { id: "u1_1", name: "工業用潤滑油", cost: 10000, targetId: 1, scale: 2, purchased: false, req: 10, desc: "捺印機効率2倍" },
-                { id: "u1_2", name: "予備バッテリー", cost: 500000, targetId: 1, scale: 2, purchased: false, req: 50, desc: "捺印機効率さらに2倍" },
-                { id: "u2_1", name: "腱鞘炎ガード", cost: 100000, targetId: 2, scale: 2, purchased: false, req: 10, desc: "ベテラン効率2倍" },
-                { id: "click_1", name: "重厚なハンコ", cost: 500, targetId: -1, scale: 10, purchased: false, req: 1, desc: "クリック効率10倍" },
-            ],
-            achievements: [
-                { id: "ach_1", name: "初めの一歩", desc: "ハンコを1回押す", unlocked: false, check: g => g.totalClicks >= 1 },
-                { id: "ach_2", name: "腱鞘炎予備軍", desc: "ハンコを1,000回押す", unlocked: false, check: g => g.totalClicks >= 1000 },
-                { id: "ach_3", name: "小さなチーム", desc: "施設を合計10個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 10 },
-                { id: "ach_4", name: "課の設立", desc: "施設を合計50個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 50 },
-                { id: "ach_5", name: "ブラック企業", desc: "施設を合計100個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 100 },
-                { id: "ach_6", name: "100万円の壁", desc: "累計で1M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1000000) },
-                { id: "ach_7", name: "億り人", desc: "累計で100M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(100000000) },
-                { id: "ach_8", name: "兆万長者", desc: "累計で1T枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e12) },
-                { id: "ach_9", name: "バイトリーダー", desc: "アルバイトを50人雇う", unlocked: false, check: g => g.facilities[0].owned >= 50 },
-                { id: "ach_10", name: "自動化推進", desc: "捺印機を50台導入する", unlocked: false, check: g => g.facilities[1].owned >= 50 },
-                { id: "ach_11", name: "効率厨", desc: "アップグレードを3つ購入", unlocked: false, check: g => g.upgrades.filter(u=>u.purchased).length >= 3 },
-                { id: "ach_12", name: "伝説の始まり", desc: "初めて栄転を行う", unlocked: false, check: g => g.prestigeCount >= 1 },
-            ]
-        };
-
-        let lastFrameTime = Date.now(); 
-
-        /* --- ロード・初期化 --- */
-        function loadGame() {
-            const saved = localStorage.getItem("mugenRingiSave");
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    game.paper = new D(parsed.paper);
-                    game.totalPaper = parsed.totalPaper ? new D(parsed.totalPaper) : new D(parsed.paper);
-                    game.prestigePoints = parsed.prestigePoints ? new D(parsed.prestigePoints) : new D(0);
-                    game.totalClicks = parsed.totalClicks || 0;
-                    game.prestigeCount = parsed.prestigeCount || 0;
-                    
-                    game.facilities.forEach((f, i) => {
-                        if (parsed.facilities && parsed.facilities[i]) f.owned = parsed.facilities[i].owned;
-                    });
-                    if(parsed.upgrades) {
-                        game.upgrades.forEach(u => {
-                            const savedUp = parsed.upgrades.find(su => su.id === u.id);
-                            if(savedUp) u.purchased = savedUp.purchased;
-                        });
-                    }
-                    if(parsed.achievements) {
-                        game.achievements.forEach(a => {
-                            const savedAch = parsed.achievements.find(sa => sa.id === a.id);
-                            if(savedAch) a.unlocked = savedAch.unlocked;
-                        });
-                    }
-                } catch (e) { console.error("Load Error", e); }
-            }
-            createFacilityUI();
-            createUpgradeUI();
-            createAchievementUI();
-            lastFrameTime = Date.now();
-            requestAnimationFrame(gameLoop);
-        }
-
-        /* --- UI構築 --- */
-        function createFacilityUI() {
-            const container = document.getElementById("facilities-container");
-            container.innerHTML = ""; 
-            game.facilities.forEach((f, index) => {
-                const div = document.createElement("div");
-                div.className = "item-box facility";
-                div.innerHTML = `
-                    <div class="item-info">
-                        <h3>${f.name}</h3>
-                        <p>${f.desc}</p>
-                        <p>所持: <span id="owned-${index}" style="font-weight:bold;">0</span></p>
-                        <p>生産: <span id="prod-total-${index}">0</span> /秒 <span style="color:#888; font-size:10px;">(単体 <span id="prod-single-${index}">0</span>)</span></p>
-                    </div>
-                    <button class="buy-btn" id="btn-${index}" onclick="buyFacility(${index})">
-                        雇用 <span id="cost-${index}">0</span>
-                    </button>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        function createUpgradeUI() {
-            const container = document.getElementById("upgrades-container");
-            container.innerHTML = `<p style="padding:5px; color:#999; font-size:12px;">条件を満たすと出現します</p>`;
-            game.upgrades.forEach((u, index) => {
-                const div = document.createElement("div");
-                div.className = "item-box";
-                div.id = `upg-box-${index}`;
-                div.style.display = "none";
-                let btnHtml = u.purchased ? 
-                    `<button class="buy-btn bought-btn" disabled>済</button>` : 
-                    `<button class="buy-btn" id="upg-btn-${index}" onclick="buyUpgrade(${index})">購入 ${u.cost}</button>`;
-                div.innerHTML = `<div class="item-info"><h3>${u.name}</h3><p>${u.desc}</p></div>${btnHtml}`;
-                container.appendChild(div);
-            });
-        }
-
-        function createAchievementUI() {
-            const container = document.getElementById("achievements-container");
-            container.innerHTML = "";
-            game.achievements.forEach((a, index) => {
-                const div = document.createElement("div");
-                div.className = "achievement-box";
-                div.id = `ach-box-${index}`;
-                if(a.unlocked) div.classList.add("unlocked");
-                
-                const icon = a.unlocked ? "🏆" : "❓";
-                const name = a.unlocked ? a.name : "？？？";
-                const desc = a.unlocked ? a.desc : "（条件未達成）";
-
-                div.innerHTML = `
-                    <div class="ach-icon">${icon}</div>
-                    <div class="item-info">
-                        <h3 id="ach-name-${index}">${name}</h3>
-                        <p id="ach-desc-${index}">${desc}</p>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        /* --- メインループ --- */
-        function gameLoop() {
-            const now = Date.now();
-            const dt = (now - lastFrameTime) / 1000; 
-            lastFrameTime = now;
-
-            const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-            const unlockedCount = game.achievements.filter(a => a.unlocked).length;
-            const achievementBonus = Math.pow(1.04, unlockedCount);
-
-            document.getElementById("bonus-display").innerText = `実績ボーナス: +${Math.round((achievementBonus - 1)*100)}% (${unlockedCount}個)`;
-            
-            if (game.prestigePoints.gt(0)) {
-                const pDisp = document.getElementById("prestige-display");
-                pDisp.style.display = "block";
-                pDisp.innerText = `★ 社内伝説度: ${formatNumber(game.prestigePoints)} (+${formatNumber(game.prestigePoints.times(10))}%)`;
-            }
-
-            let multipliers = {}; 
-            game.facilities.forEach(f => {
-                multipliers[f.id] = new D(prestigeBonus).times(achievementBonus);
-            });
-
-            game.upgrades.forEach(u => {
-                if(u.purchased && u.targetId >= 0) multipliers[u.targetId] = multipliers[u.targetId].times(u.scale);
-            });
-
-            let cps = new D(0);
-            game.facilities.forEach((f, i) => {
-                let singleProd = new D(f.baseProd).times(multipliers[f.id]);
-                let totalProd = singleProd.times(f.owned);
-                cps = cps.plus(totalProd);
-                
-                let uiTotal = document.getElementById(`prod-total-${f.id}`);
-                let uiSingle = document.getElementById(`prod-single-${f.id}`);
-                if(uiTotal) uiTotal.innerText = formatNumber(totalProd);
-                if(uiSingle) uiSingle.innerText = formatNumber(singleProd);
-            });
-
-            if (dt > 0) {
-                const earned = cps.times(dt);
-                game.paper = game.paper.plus(earned);
-                game.totalPaper = game.totalPaper.plus(earned);
-            }
-
-            document.getElementById("counter").innerText = formatNumber(game.paper);
-            document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
-            updateButtons();
-            checkPrestige();
-            checkAchievements();
-
-            if (Math.random() < 0.02) saveGame();
-            requestAnimationFrame(gameLoop);
-        }
-
-        function updateButtons() {
-            game.facilities.forEach((f, i) => {
-                const cost = getCost(f);
-                document.getElementById(`owned-${i}`).innerText = f.owned;
-                document.getElementById(`cost-${i}`).innerText = formatNumber(cost);
-                document.getElementById(`btn-${i}`).disabled = game.paper.lt(cost);
-            });
-            game.upgrades.forEach((u, i) => {
-                const box = document.getElementById(`upg-box-${i}`);
-                const btn = document.getElementById(`upg-btn-${i}`);
-                let isVisible = u.purchased;
-                if(!isVisible) {
-                    if (u.targetId >= 0 && game.facilities[u.targetId].owned >= u.req) isVisible = true;
-                    else if (u.targetId === -1) isVisible = true;
-                }
-                if(isVisible) {
-                    box.style.display = "flex";
-                    if(btn && !u.purchased) btn.disabled = game.paper.lt(u.cost);
-                }
-            });
-        }
-
-        /* --- その他ロジック --- */
-        function getTotalFacilities(g) {
-            return g.facilities.reduce((sum, f) => sum + f.owned, 0);
-        }
-
-        function checkAchievements() {
-            game.achievements.forEach((a, index) => {
-                if (!a.unlocked && a.check(game)) {
-                    a.unlocked = true;
-                    notify(`実績解除！: ${a.name}`);
-                    const box = document.getElementById(`ach-box-${index}`);
-                    box.classList.add("unlocked");
-                    box.innerHTML = `
-                        <div class="ach-icon">🏆</div>
-                        <div class="item-info">
-                            <h3>${a.name}</h3>
-                            <p>${a.desc}</p>
-                        </div>
-                    `;
-                }
-            });
-        }
-
-        function notify(msg) {
-            const area = document.getElementById("notification-area");
-            const div = document.createElement("div");
-            div.className = "notify-box";
-            div.innerText = msg;
-            area.appendChild(div);
-            setTimeout(() => div.remove(), 4000);
-        }
-
-        function checkPrestige() {
-            const threshold = 1000000; 
-            let potential = game.totalPaper.div(threshold).pow(1/3).floor();
-            const gain = potential.minus(game.prestigePoints);
-            const btn = document.getElementById("do-prestige-btn");
-            
-            if (gain.gte(1)) {
-                btn.style.display = "block";
-                document.getElementById("prestige-gain").innerText = formatNumber(gain);
-            } else {
-                btn.style.display = "none";
-            }
-        }
-
-        function doPrestige() {
-            const threshold = 1000000; 
-            let potential = game.totalPaper.div(threshold).pow(1/3).floor();
-            const gain = potential.minus(game.prestigePoints);
-
-            if(gain.lt(1)) return;
-
-            if(confirm(`本社へ栄転しますか？\n\n伝説度 +${formatNumber(gain)} を獲得します。`)) {
-                game.prestigePoints = game.prestigePoints.plus(gain);
-                game.prestigeCount++;
-                game.paper = new D(0);
-                game.facilities.forEach(f => f.owned = 0);
-                game.upgrades.forEach(u => u.purchased = false);
-                saveGame();
-                location.reload();
-            }
-        }
-
-        function clickStamp(event) {
-            game.totalClicks++;
-            let clickPower = new D(1);
-            
-            const unlockedCount = game.achievements.filter(a => a.unlocked).length;
-            const achievementBonus = Math.pow(1.04, unlockedCount);
-            const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-            
-            clickPower = clickPower.times(prestigeBonus).times(achievementBonus);
-
-            const upg = game.upgrades.find(u => u.id === "click_1");
-            if(upg && upg.purchased) clickPower = clickPower.times(upg.scale);
-
-            game.paper = game.paper.plus(clickPower);
-            game.totalPaper = game.totalPaper.plus(clickPower);
-            spawnFloatingText(event, "+" + formatNumber(clickPower));
-        }
-
-        function buyFacility(index) {
-            const f = game.facilities[index];
-            const cost = getCost(f);
-            if (game.paper.gte(cost)) {
-                game.paper = game.paper.minus(cost);
-                f.owned++;
-            }
-        }
-
-        function buyUpgrade(index) {
-            const u = game.upgrades[index];
-            if (!u.purchased && game.paper.gte(u.cost)) {
-                game.paper = game.paper.minus(u.cost);
-                u.purchased = true;
-                createUpgradeUI();
-            }
-        }
-
-        function switchTab(tabName) {
-            document.getElementById("facilities-tab").style.display = (tabName === 'facilities') ? 'block' : 'none';
-            document.getElementById("upgrades-tab").style.display = (tabName === 'upgrades') ? 'block' : 'none';
-            document.getElementById("achievements-tab").style.display = (tabName === 'achievements') ? 'block' : 'none';
-            
-            const btns = document.querySelectorAll('.tab-btn');
-            btns.forEach(b => b.className = 'tab-btn');
-            if(tabName === 'facilities') btns[0].className += ' active';
-            if(tabName === 'upgrades') btns[1].className += ' active';
-            if(tabName === 'achievements') btns[2].className += ' active';
-        }
-
-        function getCost(facility) {
-            return new D(facility.baseCost).times(new D(1.15).pow(facility.owned));
-        }
-
-        // ★修正箇所：単位付きフォーマット関数
-        function formatNumber(n) {
-            n = new D(n);
-            if (n.lt(1000000)) {
-                return n.toNumber().toLocaleString("en-US", { maximumFractionDigits: 0 });
-            }
-            
-            // eが66以上 (Unvigintillion超え) は標準指数表記
-            if (n.exponent >= 66) return n.mantissa.toFixed(2) + "e" + n.exponent;
-
-            // 単位をつける
-            const suffixIndex = Math.floor(n.exponent / 3);
-            const suffix = SUFFIXES[suffixIndex];
-            
-            // 適切な桁で割って表示 (例: 1.5e7 -> 15.00 M)
-            // mantissa * 10^(exponent % 3)
-            const val = n.mantissa * Math.pow(10, n.exponent % 3);
-            return val.toFixed(2) + " " + suffix;
-        }
-
-        function spawnFloatingText(e, text) {
-            const el = document.createElement("div");
-            el.className = "click-effect";
-            el.innerText = text;
-            let x = e.clientX;
-            let y = e.clientY;
-            if (!x || !y) {
-                const rect = document.getElementById("stamp-btn").getBoundingClientRect();
-                x = rect.left + rect.width / 2;
-                y = rect.top;
-            }
-            el.style.left = x + "px";
-            el.style.top = y + "px";
-            document.body.appendChild(el);
-            setTimeout(() => el.remove(), 1000);
-        }
-
-        function saveGame() {
-            const saveObj = {
-                paper: game.paper.toString(),
-                totalPaper: game.totalPaper.toString(),
-                prestigePoints: game.prestigePoints.toString(),
-                totalClicks: game.totalClicks,
-                prestigeCount: game.prestigeCount,
-                facilities: game.facilities.map(f => ({ owned: f.owned })),
-                upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased })),
-                achievements: game.achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
-            };
-            localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
-        }
-
-        function hardReset() {
-            if(confirm("データを完全に消去して最初からやり直しますか？")) {
-                localStorage.removeItem("mugenRingiSave");
-                location.reload();
-            }
-        }
-
-        loadGame();
-    </script>
+    <!-- ゲームロジック(JS)の読み込み -->
+    <script src="game.js"></script>
 </body>
 </html>
