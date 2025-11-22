@@ -1,4 +1,4 @@
-/* --- 無限稟議 ゲームロジック (Ver 7.0: Risk & Scandal) --- */
+/* --- 無限稟議 ゲームロジック (Ver 7.1: Robust & Fix) --- */
 
 const D = Decimal;
 
@@ -7,6 +7,7 @@ const SUFFIXES = [
     "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg"
 ];
 
+// ゲームデータ初期値
 let game = {
     paper: new D(0),
     totalPaper: new D(0),
@@ -16,20 +17,19 @@ let game = {
     startTime: Date.now(),
     lastSaveTime: Date.now(),
 
-    // ★リスク関連データ
-    risk: 0,           // 0-100
-    isScandal: false,  // 炎上中か
-    scapegoatUsed: 0,  // スケープゴート使用回数（価格上昇用）
-    lawyerLevel: 0,    // 顧問弁護士レベル
+    // リスク関連
+    risk: 0,
+    isScandal: false,
+    scapegoatUsed: 0,
+    lawyerLevel: 0,
 
     facilities: [
-        // riskPerSec: 秒間リスク増加量
         { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, riskPerSec: 0, owned: 0, desc: "安全です。" },
         { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, riskPerSec: 0, owned: 0, desc: "文句を言いません。" },
         { id: 2, name: "ベテラン社員", baseCost: 1100, baseProd: 22, riskPerSec: 0, owned: 0, desc: "残業も厭いません。" },
-        { id: 3, name: "クラウドワーカー", baseCost: 12000, baseProd: 85, riskPerSec: 0.1, owned: 0, desc: "管理が行き届きません (リスク+0.1%/s)" },
-        { id: 4, name: "承認AI Type-0", baseCost: 130000, baseProd: 350, riskPerSec: 0.5, owned: 0, desc: "時々暴走します (リスク+0.5%/s)" },
-        { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, riskPerSec: 2.0, owned: 0, desc: "倫理的問題があります (リスク+2.0%/s)" },
+        { id: 3, name: "クラウドワーカー", baseCost: 12000, baseProd: 85, riskPerSec: 0.1, owned: 0, desc: "管理不届き (リスク+0.1%/s)" },
+        { id: 4, name: "承認AI Type-0", baseCost: 130000, baseProd: 350, riskPerSec: 0.5, owned: 0, desc: "暴走の危険 (リスク+0.5%/s)" },
+        { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, riskPerSec: 2.0, owned: 0, desc: "倫理的問題 (リスク+2.0%/s)" },
     ],
 
     upgrades: [
@@ -54,7 +54,6 @@ let game = {
         { id: "ach_10", name: "自動化推進", desc: "捺印機50台", unlocked: false, check: g => g.facilities[1].owned >= 50 },
         { id: "ach_11", name: "効率厨", desc: "UG3個購入", unlocked: false, check: g => g.upgrades.filter(u => u.purchased).length >= 3 },
         { id: "ach_12", name: "伝説の始まり", desc: "初めて栄転", unlocked: false, check: g => g.prestigeCount >= 1 },
-        // ...他省略せず維持
     ]
 };
 
@@ -62,10 +61,11 @@ let lastFrameTime = Date.now();
 let clickTimestamps = [];
 let buyMode = 1; 
 
-// ★リスク対策アイテムの定義
+// 定数
 const SCAPEGOAT_BASE_COST = 2000;
 const LAWYER_BASE_COST = 10000;
 
+/* --- ロード処理 --- */
 function loadGame() {
     const saved = localStorage.getItem("mugenRingiSave");
     if (saved) {
@@ -78,7 +78,6 @@ function loadGame() {
             game.prestigeCount = parsed.prestigeCount || 0;
             game.lastSaveTime = parsed.lastSaveTime || Date.now();
             
-            // リスク関連復元
             game.risk = parsed.risk || 0;
             game.isScandal = parsed.isScandal || false;
             game.scapegoatUsed = parsed.scapegoatUsed || 0;
@@ -99,31 +98,38 @@ function loadGame() {
                     if (savedAch) a.unlocked = savedAch.unlocked;
                 });
             }
+
             processOfflineProgress();
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Save file corrupted", e); }
     }
-    createFacilityUI();
-    createUpgradeUI();
-    createAchievementUI();
-    createRiskShopUI(); // ★追加
-    updateBuyModeUI();
+
+    // UI作成（HTML要素がない場合のクラッシュ防止付き）
+    safeExecute(createFacilityUI);
+    safeExecute(createUpgradeUI);
+    safeExecute(createAchievementUI);
+    safeExecute(createRiskShopUI);
+    safeExecute(updateBuyModeUI);
+    
+    // ★修正: ロード時に炎上中なら画面を出す
+    if (game.isScandal) startScandal();
+
     lastFrameTime = Date.now();
     requestAnimationFrame(gameLoop);
 }
 
-/* --- リスクショップUI生成 --- */
+/* --- リスクショップUI --- */
 function createRiskShopUI() {
     const container = document.getElementById("risk-shop-container");
-    container.innerHTML = "";
+    if (!container) return; // HTMLに要素がなければ何もしない
 
+    container.innerHTML = "";
     // スケープゴート
     const divScape = document.createElement("div");
     divScape.className = "item-box";
     divScape.innerHTML = `
         <div class="item-info">
             <h3>スケープゴートを用意</h3>
-            <p>責任を押し付け、リスクを-50%します。<br>
-            <span style="color:#d32f2f;">※買うたびに価格が3倍になります</span></p>
+            <p>リスクを-50%します。<br><span style="color:#d32f2f;">※買うたびに価格3倍</span></p>
         </div>
         <button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">
             購入 <span id="cost-scapegoat">0</span>
@@ -131,14 +137,13 @@ function createRiskShopUI() {
     `;
     container.appendChild(divScape);
 
-    // 顧問弁護士
+    // 弁護士
     const divLawyer = document.createElement("div");
     divLawyer.className = "item-box";
     divLawyer.innerHTML = `
         <div class="item-info">
-            <h3>顧問弁護士と契約 (Lv.<span id="lvl-lawyer">0</span>)</h3>
-            <p>リスクの自然減少スピードを高めます。<br>
-            <span style="color:#d32f2f;">※買うたびに価格が2.5倍になります</span></p>
+            <h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3>
+            <p>リスク自然減少UP。<br><span style="color:#d32f2f;">※買うたびに価格2.5倍</span></p>
         </div>
         <button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">
             契約 <span id="cost-lawyer">0</span>
@@ -147,27 +152,34 @@ function createRiskShopUI() {
     container.appendChild(divLawyer);
 }
 
+/* --- オフライン進行 --- */
 function processOfflineProgress() {
     const now = Date.now();
     const diffSeconds = (now - game.lastSaveTime) / 1000;
     if (diffSeconds > 10) {
-        const cps = calculateCPS();
-        // 炎上中は効率ダウン
+        let cps = calculateCPS();
         if (game.isScandal) cps = cps.times(0.2);
         
         const earned = cps.times(diffSeconds);
         if (earned.gt(0)) {
             game.paper = game.paper.plus(earned);
             game.totalPaper = game.totalPaper.plus(earned);
-            document.getElementById("offline-time").innerText = formatNumber(diffSeconds);
-            document.getElementById("offline-earned").innerText = formatNumber(earned);
-            document.getElementById("offline-modal").style.display = "flex";
+            
+            const modal = document.getElementById("offline-modal");
+            if(modal) {
+                document.getElementById("offline-time").innerText = formatNumber(diffSeconds);
+                document.getElementById("offline-earned").innerText = formatNumber(earned);
+                modal.style.display = "flex";
+            }
         }
     }
 }
-function closeModal() { document.getElementById("offline-modal").style.display = "none"; }
+function closeModal() { 
+    const modal = document.getElementById("offline-modal");
+    if(modal) modal.style.display = "none"; 
+}
 
-/* --- 計算ロジック --- */
+/* --- 計算系 --- */
 function calculateCPS() {
     const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
@@ -193,40 +205,32 @@ function getBulkCost(facility, mode) {
     const base = new D(facility.baseCost);
     const r = 1.15;
     const k = facility.owned;
-    let n = 0;
+    
     if (mode === 'MAX') {
         if (game.paper.lt(base.times(Math.pow(r, k)))) return { cost: base.times(Math.pow(r, k)), amount: 0 };
         let term = game.paper.times(r - 1).div(base.times(Math.pow(r, k))).plus(1);
-        n = Math.floor(term.log10() / Math.log10(r));
+        let n = Math.floor(term.log10() / Math.log10(r));
         if (n < 0) n = 0;
+        return { cost: base.times(Math.pow(r, k)).times(Math.pow(r, n) - 1).div(r - 1), amount: n };
     } else {
-        n = mode;
+        let n = mode;
+        let cost = base.times(Math.pow(r, k)).times(Math.pow(r, n) - 1).div(r - 1);
+        return { cost: cost, amount: n };
     }
-    if (n === 0) return { cost: new D(0), amount: 0 };
-    let firstTerm = base.times(Math.pow(r, k));
-    let totalCost = firstTerm.times(Math.pow(r, n) - 1).div(r - 1);
-    return { cost: totalCost, amount: n };
 }
 
-/* --- ★リスク関連ロジック --- */
-// スケープゴート価格： Base * 3^使用回数 (強烈なインフレ)
-function getScapegoatCost() {
-    return new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed));
-}
-// 弁護士価格： Base * 2.5^レベル
-function getLawyerCost() {
-    return new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel));
-}
+function getScapegoatCost() { return new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed)); }
+function getLawyerCost() { return new D(LAWYER_BASE_COST).times(new D(2.5).pow(game.lawyerLevel)); }
 
+/* --- アクション --- */
 function buyScapegoat() {
     const cost = getScapegoatCost();
     if (game.paper.gte(cost)) {
         game.paper = game.paper.minus(cost);
         game.scapegoatUsed++;
-        game.risk = Math.max(0, game.risk - 50); // リスク-50%
-        // 炎上中なら解除のチャンス
+        game.risk = Math.max(0, game.risk - 50);
         if(game.isScandal && game.risk <= 0) endScandal();
-        updateRiskShop();
+        safeExecute(updateRiskShop);
     }
 }
 
@@ -235,28 +239,24 @@ function buyLawyer() {
     if (game.paper.gte(cost)) {
         game.paper = game.paper.minus(cost);
         game.lawyerLevel++;
-        updateRiskShop();
+        safeExecute(updateRiskShop);
     }
 }
 
 function startScandal() {
     game.isScandal = true;
-    document.getElementById("scandal-overlay").style.display = "flex";
+    const el = document.getElementById("scandal-overlay");
+    if(el) el.style.display = "flex";
 }
-
 function endScandal() {
     game.isScandal = false;
-    document.getElementById("scandal-overlay").style.display = "none";
+    const el = document.getElementById("scandal-overlay");
+    if(el) el.style.display = "none";
 }
-
 function clickApology() {
-    // 謝罪連打でリスク低下
-    game.risk -= 5; 
-    if (game.risk <= 0) {
-        game.risk = 0;
-        endScandal();
-    }
-    updateRiskDisplay();
+    game.risk -= 5;
+    if (game.risk <= 0) { game.risk = 0; endScandal(); }
+    safeExecute(() => updateRiskDisplay(0));
 }
 
 /* --- メインループ --- */
@@ -265,41 +265,23 @@ function gameLoop() {
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    // --- リスク計算 ---
-    // 危険施設からの増加
+    // リスク計算
     let riskIncrease = 0;
-    game.facilities.forEach(f => {
-        if (f.riskPerSec > 0) {
-            riskIncrease += f.riskPerSec * f.owned;
-        }
-    });
-    // 自然減少 (弁護士がいると早くなる: 基礎1.0 + Lv*0.5)
+    game.facilities.forEach(f => { if (f.riskPerSec > 0) riskIncrease += f.riskPerSec * f.owned; });
     let riskDecay = 1.0 + (game.lawyerLevel * 0.5);
-    
-    // リスク変動
-    if (!game.isScandal) {
-        let riskDelta = riskIncrease - riskDecay;
-        // 増えるときはそのまま、減るときは少しゆっくりにする等の調整も可能だが今回はシンプルに
-        game.risk += riskDelta * dt;
-        
-        if (game.risk < 0) game.risk = 0;
-        if (game.risk >= 100) {
-            game.risk = 100;
-            startScandal();
-        }
-    } else {
-        // 炎上中は自動では下がらない（謝罪が必要）
-    }
-    
-    updateRiskDisplay(riskIncrease - riskDecay);
 
-    // --- 生産処理 ---
-    let cps = calculateCPS();
-    
-    // 炎上ペナルティ (80%ダウン)
-    if (game.isScandal) {
-        cps = cps.times(0.2);
+    if (!game.isScandal) {
+        let delta = riskIncrease - riskDecay;
+        game.risk += delta * dt;
+        if (game.risk < 0) game.risk = 0;
+        if (game.risk >= 100) { game.risk = 100; startScandal(); }
     }
+    
+    safeExecute(() => updateRiskDisplay(riskIncrease - riskDecay));
+
+    // 生産
+    let cps = calculateCPS();
+    if (game.isScandal) cps = cps.times(0.2);
 
     if (dt > 0) {
         const earned = cps.times(dt);
@@ -308,75 +290,71 @@ function gameLoop() {
     }
 
     // UI更新
-    document.getElementById("counter").innerText = formatNumber(game.paper);
-    document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
+    setText("counter", formatNumber(game.paper));
+    setText("cps-display", "毎秒処理: " + formatNumber(cps) + " 枚");
     
-    updateButtons();
-    updateRiskShop(); // 価格更新
-    checkPrestige();
-    checkAchievements();
+    safeExecute(updateButtons);
+    safeExecute(updateRiskShop);
+    safeExecute(checkPrestige);
+    safeExecute(checkAchievements);
 
     if (Math.random() < 0.02) saveGame();
     requestAnimationFrame(gameLoop);
 }
 
+/* --- UI更新ヘルパー --- */
 function updateRiskDisplay(trend) {
     const bar = document.getElementById("risk-bar");
     const val = document.getElementById("risk-val");
     const trendTxt = document.getElementById("risk-trend");
     
-    bar.style.width = game.risk + "%";
-    val.innerText = Math.floor(game.risk) + "%";
-    
-    // 炎上メーター（モーダル内）
-    const scandalBar = document.getElementById("scandal-meter-bar");
-    if(scandalBar) scandalBar.style.width = game.risk + "%";
-
-    if(trend !== undefined) {
+    if(bar) bar.style.width = game.risk + "%";
+    if(val) val.innerText = Math.floor(game.risk) + "%";
+    if(trendTxt && trend !== undefined) {
         trendTxt.innerText = `変動: ${(trend > 0 ? "+" : "") + trend.toFixed(2)}%/秒`;
         trendTxt.style.color = trend > 0 ? "#d32f2f" : "#2e7d32";
     }
+    const scanBar = document.getElementById("scandal-meter-bar");
+    if(scanBar) scanBar.style.width = game.risk + "%";
 }
 
 function updateRiskShop() {
     const sCost = getScapegoatCost();
-    document.getElementById("cost-scapegoat").innerText = formatNumber(sCost);
-    document.getElementById("btn-scapegoat").disabled = game.paper.lt(sCost);
+    setText("cost-scapegoat", formatNumber(sCost));
+    const btnS = document.getElementById("btn-scapegoat");
+    if(btnS) btnS.disabled = game.paper.lt(sCost);
 
     const lCost = getLawyerCost();
-    document.getElementById("cost-lawyer").innerText = formatNumber(lCost);
-    document.getElementById("lvl-lawyer").innerText = game.lawyerLevel;
-    document.getElementById("btn-lawyer").disabled = game.paper.lt(lCost);
+    setText("cost-lawyer", formatNumber(lCost));
+    setText("lvl-lawyer", game.lawyerLevel);
+    const btnL = document.getElementById("btn-lawyer");
+    if(btnL) btnL.disabled = game.paper.lt(lCost);
 }
 
 function updateButtons() {
     game.facilities.forEach((f, i) => {
         const bulk = getBulkCost(f, buyMode);
-        document.getElementById(`owned-${i}`).innerText = f.owned;
+        setText(`owned-${i}`, f.owned);
         const btn = document.getElementById(`btn-${i}`);
-        
-        // 炎上中は購入不可
-        if (game.isScandal) {
-            btn.innerHTML = "炎上中<br>購入不可";
-            btn.disabled = true;
-            return;
-        }
-
-        if (buyMode === 'MAX') {
-            if (bulk.amount > 0) {
-                btn.innerHTML = `雇用 +${formatNumber(bulk.amount)}<br><span style="font-size:10px">${formatNumber(bulk.cost)}</span>`;
-                btn.disabled = false;
-            } else {
-                const nextCost = new D(f.baseCost).times(Math.pow(1.15, f.owned));
-                btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
+        if(btn) {
+            if (game.isScandal) {
+                btn.innerHTML = "炎上中<br>購入不可";
                 btn.disabled = true;
+            } else if (buyMode === 'MAX') {
+                if (bulk.amount > 0) {
+                    btn.innerHTML = `雇用 +${formatNumber(bulk.amount)}<br><span style="font-size:10px">${formatNumber(bulk.cost)}</span>`;
+                    btn.disabled = false;
+                } else {
+                    const nextCost = new D(f.baseCost).times(Math.pow(1.15, f.owned));
+                    btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
+                    btn.disabled = true;
+                }
+            } else {
+                btn.innerHTML = `雇用 +${buyMode}<br><span id="cost-${i}">${formatNumber(bulk.cost)}</span>`;
+                btn.disabled = game.paper.lt(bulk.cost);
             }
-        } else {
-            btn.innerHTML = `雇用 +${buyMode}<br><span id="cost-${i}">${formatNumber(bulk.cost)}</span>`;
-            btn.disabled = game.paper.lt(bulk.cost);
         }
     });
-
     game.upgrades.forEach((u, i) => {
         const box = document.getElementById(`upg-box-${i}`);
         const btn = document.getElementById(`upg-btn-${i}`);
@@ -385,9 +363,13 @@ function updateButtons() {
             if (u.targetId >= 0 && game.facilities[u.targetId].owned >= u.req) isVisible = true;
             else if (u.targetId === -1) isVisible = true;
         }
-        if (isVisible) {
-            box.style.display = "flex";
-            if (btn && !u.purchased) btn.disabled = game.paper.lt(u.cost) || game.isScandal;
+        if(box) {
+            if (isVisible) {
+                box.style.display = "flex";
+                if (btn && !u.purchased) btn.disabled = game.paper.lt(u.cost) || game.isScandal;
+            } else {
+                box.style.display = "none";
+            }
         }
     });
 }
@@ -402,7 +384,22 @@ function updateBuyModeUI() {
         if (btn) btn.className = "mode-btn";
     });
     const activeId = (buyMode === 'MAX') ? 'max' : buyMode;
-    document.getElementById(`mode-${activeId}`).className = "mode-btn active";
+    const activeBtn = document.getElementById(`mode-${activeId}`);
+    if(activeBtn) activeBtn.className = "mode-btn active";
+}
+
+function switchTab(tabName) {
+    const tabs = ['facilities', 'upgrades', 'risk', 'achievements'];
+    tabs.forEach((t, i) => {
+        const el = document.getElementById(`${t}-tab`);
+        if(el) el.style.display = (t === tabName) ? 'block' : 'none';
+    });
+    
+    const btns = document.querySelectorAll('.tab-btn');
+    btns.forEach((b, i) => {
+        b.className = 'tab-btn';
+        if (tabs[i] === tabName) b.className += ' active';
+    });
 }
 
 function clickStamp(event) {
@@ -413,21 +410,15 @@ function clickStamp(event) {
 
     let clickPower = new D(1);
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    const achievementBonus = Math.pow(1.04, unlockedCount);
-    const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
-    clickPower = clickPower.times(prestigeBonus).times(achievementBonus);
-
+    clickPower = clickPower.times(Math.pow(1.04, unlockedCount));
+    clickPower = clickPower.times(game.prestigePoints.times(0.1).plus(1));
     const upg = game.upgrades.find(u => u.id === "click_1");
     if (upg && upg.purchased) clickPower = clickPower.times(upg.scale);
-
-    // 炎上中はクリックも弱くする？ 今回はクリックは救済措置としてそのままにする
-    // if (game.isScandal) clickPower = clickPower.times(0.2);
 
     game.paper = game.paper.plus(clickPower);
     game.totalPaper = game.totalPaper.plus(clickPower);
     spawnFloatingText(event, "+" + formatNumber(clickPower));
 }
-
 function clickRateCheck() { return clickTimestamps.length >= 10; }
 
 function buyFacility(index) {
@@ -438,7 +429,6 @@ function buyFacility(index) {
         f.owned += bulk.amount;
     }
 }
-
 function buyUpgrade(index) {
     const u = game.upgrades[index];
     if (!u.purchased && game.paper.gte(u.cost)) {
@@ -448,20 +438,55 @@ function buyUpgrade(index) {
     }
 }
 
-function switchTab(tabName) {
-    document.getElementById("facilities-tab").style.display = (tabName === 'facilities') ? 'block' : 'none';
-    document.getElementById("upgrades-tab").style.display = (tabName === 'upgrades') ? 'block' : 'none';
-    document.getElementById("achievements-tab").style.display = (tabName === 'achievements') ? 'block' : 'none';
-    document.getElementById("risk-tab").style.display = (tabName === 'risk') ? 'block' : 'none'; // 追加
+/* --- 転生 --- */
+function checkPrestige() {
+    const threshold = 1000000;
+    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
+    let gain = potential.minus(game.prestigePoints);
+    if (gain.lt(0)) gain = new D(0);
 
-    const btns = document.querySelectorAll('.tab-btn');
-    btns.forEach(b => b.className = 'tab-btn');
-    if (tabName === 'facilities') btns[0].className += ' active';
-    if (tabName === 'upgrades') btns[1].className += ' active';
-    if (tabName === 'risk') btns[2].className += ' active'; // 追加
-    if (tabName === 'achievements') btns[3].className += ' active';
+    // 次の目標を表示
+    let nextPoint = potential.plus(1);
+    let reqTotal = nextPoint.pow(3).times(threshold);
+    let remaining = reqTotal.minus(game.totalPaper);
+    if(remaining.lt(0)) remaining = new D(0);
+
+    setText("next-prestige-info", `次の伝説度まで: あと ${formatNumber(remaining)} 枚`);
+
+    const btn = document.getElementById("do-prestige-btn");
+    if(btn) {
+        if (gain.gte(1)) {
+            btn.style.display = "block";
+            setText("prestige-gain", formatNumber(gain));
+        } else {
+            btn.style.display = "none";
+        }
+    }
 }
 
+function doPrestige() {
+    const threshold = 1000000;
+    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
+    const gain = potential.minus(game.prestigePoints);
+    if (gain.lt(1)) return;
+    if (confirm(`本社へ栄転しますか？\n\n伝説度 +${formatNumber(gain)} を獲得します。`)) {
+        game.prestigePoints = game.prestigePoints.plus(gain);
+        game.prestigeCount++;
+        game.paper = new D(0);
+        
+        game.risk = 0; 
+        game.isScandal = false;
+        game.scapegoatUsed = 0;
+        game.lawyerLevel = 0;
+
+        game.facilities.forEach(f => f.owned = 0);
+        game.upgrades.forEach(u => u.purchased = false);
+        saveGame();
+        location.reload();
+    }
+}
+
+/* --- その他ツール --- */
 function formatNumber(n) {
     n = new D(n);
     if (n.lt(1000000)) return n.toNumber().toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -471,7 +496,6 @@ function formatNumber(n) {
     const val = n.mantissa * Math.pow(10, n.exponent % 3);
     return val.toFixed(2) + " " + suffix;
 }
-
 function spawnFloatingText(e, text) {
     const el = document.createElement("div");
     el.className = "click-effect";
@@ -479,18 +503,19 @@ function spawnFloatingText(e, text) {
     let x = e.clientX;
     let y = e.clientY;
     if (!x || !y) {
-        const rect = document.getElementById("stamp-btn").getBoundingClientRect();
-        x = rect.left + rect.width / 2;
-        y = rect.top;
+        const btn = document.getElementById("stamp-btn");
+        if(btn) {
+            const rect = btn.getBoundingClientRect();
+            x = rect.left + rect.width / 2;
+            y = rect.top;
+        }
     }
     el.style.left = x + "px";
     el.style.top = y + "px";
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1000);
 }
-
 function getTotalFacilities(g) { return g.facilities.reduce((sum, f) => sum + f.owned, 0); }
-
 function checkAchievements() {
     game.achievements.forEach((a, index) => {
         if (!a.unlocked && a.check(game)) {
@@ -506,6 +531,7 @@ function checkAchievements() {
 }
 function notify(msg) {
     const area = document.getElementById("notification-area");
+    if(!area) return;
     const div = document.createElement("div");
     div.className = "notify-box";
     div.innerText = msg;
@@ -513,60 +539,69 @@ function notify(msg) {
     setTimeout(() => div.remove(), 4000);
 }
 
-// ★転生ロジック修正：次の目標を見える化
-function checkPrestige() {
-    const threshold = 1000000;
-    // 獲得見込みポイント
-    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
-    let gain = potential.minus(game.prestigePoints);
-    if (gain.lt(0)) gain = new D(0);
-
-    // 次のポイントまでの必要枚数
-    // (currentPoints + 1 + gain_already_claimed?? no, logic is strictly cumulative)
-    // nextTargetPoints = potential + 1
-    // requiredTotal = (potential + 1)^3 * 1,000,000
-    
-    let nextPoint = potential.plus(1);
-    let requiredTotal = nextPoint.pow(3).times(threshold);
-    let remaining = requiredTotal.minus(game.totalPaper);
-    
-    document.getElementById("next-prestige-info").innerText = 
-        `次の伝説度まで: あと ${formatNumber(remaining)} 枚 (累計 ${formatNumber(game.totalPaper)})`;
-
-    const btn = document.getElementById("do-prestige-btn");
-    // 1ポイントでも稼げるならボタンを表示、そうでなくても情報は表示したままグレーアウトしてもいいが、
-    // 今回は「稼げる時だけボタン有効」にするスタイル
-    if (gain.gte(1)) {
-        btn.style.display = "block";
-        document.getElementById("prestige-gain").innerText = formatNumber(gain);
-    } else {
-        btn.style.display = "none";
-    }
+// 安全に要素のテキストを変える関数
+function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = text;
 }
 
-function doPrestige() {
-    const threshold = 1000000;
-    let potential = game.totalPaper.div(threshold).pow(1 / 3).floor();
-    const gain = potential.minus(game.prestigePoints);
+// UI生成関数を安全に呼ぶ（HTML要素がない場合は無視する）
+function safeExecute(func) {
+    try { func(); } catch (e) { console.warn("UI update skipped:", e); }
+}
 
-    if (gain.lt(1)) return;
+function createFacilityUI() {
+    const container = document.getElementById("facilities-container");
+    if(!container) return;
+    container.innerHTML = "";
+    game.facilities.forEach((f, index) => {
+        const div = document.createElement("div");
+        div.className = "item-box facility";
+        div.innerHTML = `
+            <div class="item-info">
+                <h3>${f.name}</h3>
+                <p>${f.desc}</p>
+                <p>所持: <span id="owned-${index}" style="font-weight:bold;">0</span></p>
+                <p>生産: <span id="prod-total-${index}">0</span> /秒 <span style="color:#888; font-size:10px;">(単体 <span id="prod-single-${index}">0</span>)</span></p>
+            </div>
+            <button class="buy-btn" id="btn-${index}" onclick="buyFacility(${index})">
+                雇用 <span id="cost-${index}">0</span>
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
 
-    if (confirm(`本社へ栄転しますか？\n\n伝説度 +${formatNumber(gain)} を獲得します。`)) {
-        game.prestigePoints = game.prestigePoints.plus(gain);
-        game.prestigeCount++;
-        game.paper = new D(0);
-        
-        // リスクシステムの初期化
-        game.risk = 0;
-        game.isScandal = false;
-        game.scapegoatUsed = 0; // 価格リセット
-        game.lawyerLevel = 0;   // レベルリセット
+function createUpgradeUI() {
+    const container = document.getElementById("upgrades-container");
+    if(!container) return;
+    container.innerHTML = `<p style="padding:5px; color:#999; font-size:12px;">条件を満たすと出現します</p>`;
+    game.upgrades.forEach((u, index) => {
+        const div = document.createElement("div");
+        div.className = "item-box";
+        div.id = `upg-box-${index}`;
+        div.style.display = "none";
+        let btnHtml = u.purchased ? `<button class="buy-btn bought-btn" disabled>済</button>` : `<button class="buy-btn" id="upg-btn-${index}" onclick="buyUpgrade(${index})">購入 ${u.cost}</button>`;
+        div.innerHTML = `<div class="item-info"><h3>${u.name}</h3><p>${u.desc}</p></div>${btnHtml}`;
+        container.appendChild(div);
+    });
+}
 
-        game.facilities.forEach(f => f.owned = 0);
-        game.upgrades.forEach(u => u.purchased = false);
-        saveGame();
-        location.reload();
-    }
+function createAchievementUI() {
+    const container = document.getElementById("achievements-container");
+    if(!container) return;
+    container.innerHTML = "";
+    game.achievements.forEach((a, index) => {
+        const div = document.createElement("div");
+        div.className = "achievement-box";
+        div.id = `ach-box-${index}`;
+        if (a.unlocked) div.classList.add("unlocked");
+        const icon = a.unlocked ? "🏆" : "❓";
+        const name = a.unlocked ? a.name : "？？？";
+        const desc = a.unlocked ? a.desc : "（条件未達成）";
+        div.innerHTML = `<div class="ach-icon">${icon}</div><div class="item-info"><h3 id="ach-name-${index}">${name}</h3><p id="ach-desc-${index}">${desc}</p></div>`;
+        container.appendChild(div);
+    });
 }
 
 function saveGame() {
@@ -577,13 +612,10 @@ function saveGame() {
         totalClicks: game.totalClicks,
         prestigeCount: game.prestigeCount,
         lastSaveTime: Date.now(),
-        
-        // リスク保存
         risk: game.risk,
         isScandal: game.isScandal,
         scapegoatUsed: game.scapegoatUsed,
         lawyerLevel: game.lawyerLevel,
-
         facilities: game.facilities.map(f => ({ owned: f.owned })),
         upgrades: game.upgrades.map(u => ({ id: u.id, purchased: u.purchased })),
         achievements: game.achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
@@ -591,32 +623,18 @@ function saveGame() {
     localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
 }
 
-function exportSave() {
-    saveGame();
-    const saved = localStorage.getItem("mugenRingiSave");
-    const encoded = btoa(saved);
-    prompt("以下のテキストをコピーして保存してください", encoded);
-}
-
+function exportSave() { saveGame(); const saved = localStorage.getItem("mugenRingiSave"); prompt("コピーしてください", btoa(saved)); }
 function importSave() {
-    const encoded = prompt("保存したデータ（テキスト）を貼り付けてください");
+    const encoded = prompt("データを貼り付けてください");
     if (encoded) {
         try {
             const decoded = atob(encoded);
             JSON.parse(decoded);
             localStorage.setItem("mugenRingiSave", decoded);
             location.reload();
-        } catch (e) {
-            alert("データの読み込みに失敗しました。");
-        }
+        } catch (e) { alert("データ読み込み失敗"); }
     }
 }
-
-function hardReset() {
-    if (confirm("本当に全てのデータを消去しますか？（復元できません）")) {
-        localStorage.removeItem("mugenRingiSave");
-        location.reload();
-    }
-}
+function hardReset() { if (confirm("全データを消去しますか？")) { localStorage.removeItem("mugenRingiSave"); location.reload(); } }
 
 window.onload = function() { loadGame(); };
