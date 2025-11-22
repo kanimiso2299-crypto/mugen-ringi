@@ -1,4 +1,10 @@
-/* --- 無限稟議 ゲームロジック (Ver 7.1: Robust & Fix) --- */
+/* --- 無限稟議 ゲームロジック (Ver 7.2: Stable Fix) --- */
+
+// ライブラリが読み込まれているか確認
+if (typeof Decimal === 'undefined') {
+    console.error("Decimal library not found. Please reload.");
+    alert("エラー: 読み込みに失敗しました。ページを再読み込みしてください。");
+}
 
 const D = Decimal;
 
@@ -7,7 +13,7 @@ const SUFFIXES = [
     "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg"
 ];
 
-// ゲームデータ初期値
+// ゲームデータ
 let game = {
     paper: new D(0),
     totalPaper: new D(0),
@@ -61,11 +67,10 @@ let lastFrameTime = Date.now();
 let clickTimestamps = [];
 let buyMode = 1; 
 
-// 定数
 const SCAPEGOAT_BASE_COST = 2000;
 const LAWYER_BASE_COST = 10000;
 
-/* --- ロード処理 --- */
+/* --- ロード --- */
 function loadGame() {
     const saved = localStorage.getItem("mugenRingiSave");
     if (saved) {
@@ -103,51 +108,37 @@ function loadGame() {
         } catch (e) { console.error("Save file corrupted", e); }
     }
 
-    // UI作成（HTML要素がない場合のクラッシュ防止付き）
     safeExecute(createFacilityUI);
     safeExecute(createUpgradeUI);
     safeExecute(createAchievementUI);
     safeExecute(createRiskShopUI);
     safeExecute(updateBuyModeUI);
     
-    // ★修正: ロード時に炎上中なら画面を出す
     if (game.isScandal) startScandal();
 
     lastFrameTime = Date.now();
     requestAnimationFrame(gameLoop);
 }
 
-/* --- リスクショップUI --- */
+/* --- UI初期生成 --- */
 function createRiskShopUI() {
     const container = document.getElementById("risk-shop-container");
-    if (!container) return; // HTMLに要素がなければ何もしない
-
+    if (!container) return;
     container.innerHTML = "";
-    // スケープゴート
+    
     const divScape = document.createElement("div");
     divScape.className = "item-box";
     divScape.innerHTML = `
-        <div class="item-info">
-            <h3>スケープゴートを用意</h3>
-            <p>リスクを-50%します。<br><span style="color:#d32f2f;">※買うたびに価格3倍</span></p>
-        </div>
-        <button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">
-            購入 <span id="cost-scapegoat">0</span>
-        </button>
+        <div class="item-info"><h3>スケープゴート</h3><p>リスク-50% (価格3倍増)</p></div>
+        <button class="buy-btn risk-btn danger" id="btn-scapegoat" onclick="buyScapegoat()">購入 <span id="cost-scapegoat">0</span></button>
     `;
     container.appendChild(divScape);
 
-    // 弁護士
     const divLawyer = document.createElement("div");
     divLawyer.className = "item-box";
     divLawyer.innerHTML = `
-        <div class="item-info">
-            <h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3>
-            <p>リスク自然減少UP。<br><span style="color:#d32f2f;">※買うたびに価格2.5倍</span></p>
-        </div>
-        <button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">
-            契約 <span id="cost-lawyer">0</span>
-        </button>
+        <div class="item-info"><h3>顧問弁護士 (Lv.<span id="lvl-lawyer">0</span>)</h3><p>リスク減少UP (価格2.5倍増)</p></div>
+        <button class="buy-btn risk-btn" id="btn-lawyer" onclick="buyLawyer()">契約 <span id="cost-lawyer">0</span></button>
     `;
     container.appendChild(divLawyer);
 }
@@ -159,12 +150,10 @@ function processOfflineProgress() {
     if (diffSeconds > 10) {
         let cps = calculateCPS();
         if (game.isScandal) cps = cps.times(0.2);
-        
         const earned = cps.times(diffSeconds);
         if (earned.gt(0)) {
             game.paper = game.paper.plus(earned);
             game.totalPaper = game.totalPaper.plus(earned);
-            
             const modal = document.getElementById("offline-modal");
             if(modal) {
                 document.getElementById("offline-time").innerText = formatNumber(diffSeconds);
@@ -179,15 +168,15 @@ function closeModal() {
     if(modal) modal.style.display = "none"; 
 }
 
-/* --- 計算系 --- */
+/* --- 計算 --- */
 function calculateCPS() {
     const prestigeBonus = game.prestigePoints.times(0.1).plus(1);
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    const achievementBonus = Math.pow(1.04, unlockedCount);
+    const achievementBonus = new D(1.04).pow(unlockedCount); // Decimalで計算
     
     let multipliers = {};
     game.facilities.forEach(f => {
-        multipliers[f.id] = new D(prestigeBonus).times(achievementBonus);
+        multipliers[f.id] = prestigeBonus.times(achievementBonus);
     });
     game.upgrades.forEach(u => {
         if (u.purchased && u.targetId >= 0) multipliers[u.targetId] = multipliers[u.targetId].times(u.scale);
@@ -201,22 +190,45 @@ function calculateCPS() {
     return cps;
 }
 
+// ★重要修正：MAX購入計算の安全化
+// 数学的な計算ではなく、ループでシミュレーションしてエラーを防ぐ
 function getBulkCost(facility, mode) {
     const base = new D(facility.baseCost);
     const r = 1.15;
-    const k = facility.owned;
+    let cost = new D(0);
+    let amount = 0;
     
     if (mode === 'MAX') {
-        if (game.paper.lt(base.times(Math.pow(r, k)))) return { cost: base.times(Math.pow(r, k)), amount: 0 };
-        let term = game.paper.times(r - 1).div(base.times(Math.pow(r, k))).plus(1);
-        let n = Math.floor(term.log10() / Math.log10(r));
-        if (n < 0) n = 0;
-        return { cost: base.times(Math.pow(r, k)).times(Math.pow(r, n) - 1).div(r - 1), amount: n };
+        // 最大100個までループで計算（処理落ち防止）
+        let tempCost = new D(0);
+        let currentPaper = game.paper;
+        
+        // 現在の価格からスタート
+        let currentPrice = base.times(new D(r).pow(facility.owned));
+        
+        for(let i=0; i<1000; i++) {
+            if (currentPaper.gte(currentPrice)) {
+                currentPaper = currentPaper.minus(currentPrice);
+                cost = cost.plus(currentPrice);
+                amount++;
+                // 次の価格
+                currentPrice = currentPrice.times(r);
+            } else {
+                break;
+            }
+        }
     } else {
-        let n = mode;
-        let cost = base.times(Math.pow(r, k)).times(Math.pow(r, n) - 1).div(r - 1);
-        return { cost: cost, amount: n };
+        let count = parseInt(mode);
+        let tempPrice = base.times(new D(r).pow(facility.owned));
+        
+        for(let i=0; i<count; i++) {
+            cost = cost.plus(tempPrice);
+            tempPrice = tempPrice.times(r);
+        }
+        amount = count;
     }
+    
+    return { cost: cost, amount: amount };
 }
 
 function getScapegoatCost() { return new D(SCAPEGOAT_BASE_COST).times(new D(3).pow(game.scapegoatUsed)); }
@@ -276,7 +288,6 @@ function gameLoop() {
         if (game.risk < 0) game.risk = 0;
         if (game.risk >= 100) { game.risk = 100; startScandal(); }
     }
-    
     safeExecute(() => updateRiskDisplay(riskIncrease - riskDecay));
 
     // 生産
@@ -345,7 +356,8 @@ function updateButtons() {
                     btn.innerHTML = `雇用 +${formatNumber(bulk.amount)}<br><span style="font-size:10px">${formatNumber(bulk.cost)}</span>`;
                     btn.disabled = false;
                 } else {
-                    const nextCost = new D(f.baseCost).times(Math.pow(1.15, f.owned));
+                    // 次の1個の価格
+                    const nextCost = new D(f.baseCost).times(new D(1.15).pow(f.owned));
                     btn.innerHTML = `雇用 (不足)<br><span style="font-size:10px">${formatNumber(nextCost)}</span>`;
                     btn.disabled = true;
                 }
@@ -355,6 +367,7 @@ function updateButtons() {
             }
         }
     });
+    // ... アップグレードの更新は省略せず書く
     game.upgrades.forEach((u, i) => {
         const box = document.getElementById(`upg-box-${i}`);
         const btn = document.getElementById(`upg-btn-${i}`);
@@ -410,7 +423,7 @@ function clickStamp(event) {
 
     let clickPower = new D(1);
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
-    clickPower = clickPower.times(Math.pow(1.04, unlockedCount));
+    clickPower = clickPower.times(new D(1.04).pow(unlockedCount));
     clickPower = clickPower.times(game.prestigePoints.times(0.1).plus(1));
     const upg = game.upgrades.find(u => u.id === "click_1");
     if (upg && upg.purchased) clickPower = clickPower.times(upg.scale);
@@ -445,7 +458,6 @@ function checkPrestige() {
     let gain = potential.minus(game.prestigePoints);
     if (gain.lt(0)) gain = new D(0);
 
-    // 次の目標を表示
     let nextPoint = potential.plus(1);
     let reqTotal = nextPoint.pow(3).times(threshold);
     let remaining = reqTotal.minus(game.totalPaper);
@@ -486,7 +498,7 @@ function doPrestige() {
     }
 }
 
-/* --- その他ツール --- */
+/* --- ツール --- */
 function formatNumber(n) {
     n = new D(n);
     if (n.lt(1000000)) return n.toNumber().toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -538,17 +550,11 @@ function notify(msg) {
     area.appendChild(div);
     setTimeout(() => div.remove(), 4000);
 }
-
-// 安全に要素のテキストを変える関数
 function setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
 }
-
-// UI生成関数を安全に呼ぶ（HTML要素がない場合は無視する）
-function safeExecute(func) {
-    try { func(); } catch (e) { console.warn("UI update skipped:", e); }
-}
+function safeExecute(func) { try { func(); } catch (e) { console.warn("UI update skipped:", e); } }
 
 function createFacilityUI() {
     const container = document.getElementById("facilities-container");
@@ -571,7 +577,6 @@ function createFacilityUI() {
         container.appendChild(div);
     });
 }
-
 function createUpgradeUI() {
     const container = document.getElementById("upgrades-container");
     if(!container) return;
@@ -586,7 +591,6 @@ function createUpgradeUI() {
         container.appendChild(div);
     });
 }
-
 function createAchievementUI() {
     const container = document.getElementById("achievements-container");
     if(!container) return;
@@ -622,7 +626,6 @@ function saveGame() {
     };
     localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
 }
-
 function exportSave() { saveGame(); const saved = localStorage.getItem("mugenRingiSave"); prompt("コピーしてください", btoa(saved)); }
 function importSave() {
     const encoded = prompt("データを貼り付けてください");
