@@ -3,11 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>無限稟議 - MUGEN RINGI (Ver.7.0)</title>
+    <title>無限稟議 - MUGEN RINGI (Ver.8.0)</title>
     <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- ★新機能：ニュースティッカー -->
+    <div id="news-ticker-container">
+        <div id="news-ticker-content">読み込み中...</div>
+    </div>
 
     <!-- 炎上時の赤画面エフェクト -->
     <div id="scandal-overlay" style="display: none;">
@@ -23,6 +28,13 @@
         </div>
     </div>
 
+    <!-- ★新機能：ゴールデン書類（特別決済） -->
+    <div id="golden-doc" onclick="clickGoldenDoc()" style="display: none;">
+        <div class="golden-glow"></div>
+        <div class="golden-icon">🈪</div>
+        <div class="golden-text">特別決済</div>
+    </div>
+
     <!-- 左側：作業エリア -->
     <div id="work-area">
         <!-- リスクゲージ -->
@@ -36,6 +48,7 @@
         </div>
 
         <div id="bonus-display">実績ボーナス: 0%</div>
+        <div id="buff-display" style="display:none;"></div> <!-- バフ表示用 -->
         <div id="prestige-display">★ 社内伝説度: 0 (+0%)</div>
         
         <h1>【 未処理書類 】</h1>
@@ -50,7 +63,6 @@
         <div id="settings-area">
             <div id="system-msg">自動保存中</div>
             
-            <!-- 栄転情報（常に表示するように変更） -->
             <div id="prestige-info-box">
                 <div id="next-prestige-info" style="font-size:11px; color:#555; margin-bottom:5px;">
                     次の伝説度まで: あと 0 枚
@@ -75,11 +87,10 @@
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('facilities')">設備</button>
             <button class="tab-btn" onclick="switchTab('upgrades')">改善</button>
-            <button class="tab-btn" onclick="switchTab('risk')">リスク</button> <!-- 新タブ -->
+            <button class="tab-btn" onclick="switchTab('risk')">リスク</button>
             <button class="tab-btn" onclick="switchTab('achievements')">実績</button>
         </div>
 
-        <!-- まとめ買いボタン -->
         <div id="buy-mode-container">
             <span style="font-size:12px; font-weight:bold; color:#555; margin-right:10px;">x:</span>
             <button class="mode-btn active" id="mode-1" onclick="setBuyMode(1)">1</button>
@@ -98,14 +109,11 @@
             </div>
         </div>
 
-        <!-- ★新タブ：リスク管理 -->
         <div id="risk-tab" class="scroll-content" style="display:none;">
             <div style="padding:10px; background:#fff0f0; font-size:12px; color:#d32f2f; margin-bottom:10px;">
                 ※危険な施設を持つとリスクが上昇します。<br>100%で炎上し生産激減。
             </div>
-            <div id="risk-shop-container">
-                <!-- JSで生成 -->
-            </div>
+            <div id="risk-shop-container"></div>
         </div>
         
         <div id="achievements-tab" class="scroll-content" style="display:none;">
@@ -115,7 +123,6 @@
 
     <div id="notification-area"></div>
 
-    <!-- オフラインモーダル -->
     <div id="offline-modal" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <h2>業務再開</h2>
@@ -128,7 +135,6 @@
         </div>
     </div>
 
-    <!-- キャッシュ回避のためのバージョン付与 -->
-    <script src="game.js?v=7.0"></script>
+    <script src="game.js?v=8.0"></script>
 </body>
 </html>
