@@ -3,36 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>無限稟議 - MUGEN RINGI (Ver.5.0)</title>
-    <!-- 外部ライブラリの読み込み -->
+    <title>無限稟議 - MUGEN RINGI (Ver.6.0)</title>
+    <!-- 外部ライブラリ -->
     <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
-    <!-- デザインファイル(CSS)の読み込み -->
+    <!-- CSS読み込み -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <!-- 左側：作業エリア -->
     <div id="work-area">
-        <!-- 情報表示 -->
         <div id="bonus-display">実績ボーナス: 0%</div>
         <div id="prestige-display">★ 社内伝説度: 0 (+0%)</div>
         
-        <!-- カウンター -->
         <h1>【 未処理書類 】</h1>
         <div id="counter">0</div>
         <div id="cps-display">毎秒処理: 0 枚</div>
         
-        <!-- メインボタン -->
         <button id="stamp-btn" onclick="clickStamp(event)">
             <span>承認</span>
             <span style="font-size:14px; margin-top:5px;">(CLICK)</span>
         </button>
         
-        <!-- 設定・データ管理エリア -->
         <div id="settings-area">
             <div id="system-msg">自動保存中</div>
             
-            <!-- 栄転ボタン -->
             <button id="do-prestige-btn" class="prestige-btn" onclick="doPrestige()">
                 本社へ栄転する<br>
                 <span style="font-size:12px; font-weight:normal;">
@@ -42,7 +37,6 @@
 
             <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ccc;">
 
-            <!-- データ管理ボタン群 -->
             <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
                 <button class="data-btn" onclick="exportSave()">データ書き出し</button>
                 <button class="data-btn" onclick="importSave()">データ読み込み</button>
@@ -59,7 +53,15 @@
             <button class="tab-btn" onclick="switchTab('achievements')">実績</button>
         </div>
 
-        <!-- 各種リスト -->
+        <!-- ★新機能：まとめ買い切り替えボタン -->
+        <div id="buy-mode-container">
+            <span style="font-size:12px; font-weight:bold; color:#555; margin-right:10px;">購入数:</span>
+            <button class="mode-btn active" id="mode-1" onclick="setBuyMode(1)">x1</button>
+            <button class="mode-btn" id="mode-10" onclick="setBuyMode(10)">x10</button>
+            <button class="mode-btn" id="mode-100" onclick="setBuyMode(100)">x100</button>
+            <button class="mode-btn" id="mode-max" onclick="setBuyMode('MAX')">MAX</button>
+        </div>
+
         <div id="facilities-tab" class="scroll-content">
             <div id="facilities-container"></div>
         </div>
@@ -78,7 +80,19 @@
     <!-- 通知エリア -->
     <div id="notification-area"></div>
 
-    <!-- ゲームロジック(JS)の読み込み -->
+    <!-- ★新機能：オフライン進行報告モーダル -->
+    <div id="offline-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2>おかえりなさい！</h2>
+            <p>あなたが不在の間も、部下たちが業務を遂行しました。</p>
+            <div class="offline-result">
+                <p>経過時間: <span id="offline-time" style="font-weight:bold;">0</span> 秒</p>
+                <p>処理枚数: <span id="offline-earned" style="font-weight:bold; color:#bf0000; font-size:18px;">0</span> 枚</p>
+            </div>
+            <button onclick="closeModal()">業務再開</button>
+        </div>
+    </div>
+
     <script src="game.js"></script>
 </body>
 </html>
