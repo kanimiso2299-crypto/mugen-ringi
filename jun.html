@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>無限稟議 - MUGEN RINGI</title>
+    <!-- 巨大数を扱うライブラリ「Break_infinity.js」をネットから読み込む -->
+    <script src="https://unpkg.com/break_infinity.js@2/dist/break_infinity.min.js"></script>
+    
+    <style>
+        /* --- デザインの設定（CSS） --- */
+        body {
+            font-family: "MS Mincho", "Hiragino Mincho ProN", serif; /* 事務的なフォント */
+            background-color: #f0f2f5; /* オフィスの壁紙っぽいグレー */
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden; /* 画面スクロール禁止 */
+        }
+
+        /* 左側：作業エリア */
+        #work-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-right: 2px solid #ccc;
+            padding-right: 20px;
+        }
+
+        /* 右側：設備エリア */
+        #upgrade-area {
+            flex: 1;
+            padding-left: 20px;
+            overflow-y: auto; /* 施設が増えたらスクロール */
+            background-color: #fff;
+            border-left: 1px solid #ddd;
+        }
+
+        h1 { margin: 0; font-size: 24px; color: #444; }
+        
+        /* メインの数字表示 */
+        #counter {
+            font-size: 60px;
+            font-weight: bold;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace; /* デジタル数字っぽく */
+        }
+
+        #cps-display { font-size: 18px; color: #666; margin-bottom: 40px;}
+
+        /* ハンコボタン */
+        #stamp-btn {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 10px solid #bf0000; /* 朱肉の色 */
+            background-color: #fff;
+            color: #bf0000;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        
+        #stamp-btn:active {
+            transform: scale(0.95); /* 押したときに縮む */
+            background-color: #ffe6e6;
+        }
+
+        /* 施設リストのデザイン */
+        .facility {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        
+        .facility:hover { background-color: #eef; }
+        .facility.locked { opacity: 0.6; pointer-events: none; } /* お金が足りない時 */
+
+        .facility-info h3 { margin: 0 0 5px 0; font-size: 18px; }
+        .facility-info p { margin: 0; font-size: 14px; color: #555; }
+        
+        .buy-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            min-width: 120px;
+        }
+        
+        .buy-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* 演出用：クリック時の浮かぶ数字 */
+        .click-effect {
+            position: absolute;
+            color: #bf0000;
+            font-weight: bold;
+            font-size: 24px;
+            pointer-events: none;
+            animation: floatUp 1s forwards;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 左側：ハンコを押す場所 -->
+    <div id="work-area">
+        <h1>【 未処理書類 】</h1>
+        <div id="counter">0</div>
+        <div id="cps-display">毎秒処理: 0 枚</div>
+        
+        <button id="stamp-btn" onclick="clickStamp(event)">
+            <span>承認</span>
+            <span style="font-size:14px; margin-top:5px;">(CLICK)</span>
+        </button>
+        
+        <div style="margin-top:50px; font-size:12px; color:#999;">
+            ※データは自動保存されます
+            <br>
+            <button onclick="resetGame()" style="margin-top:10px;">辞表提出(データリセット)</button>
+        </div>
+    </div>
+
+    <!-- 右側：人材・設備リスト -->
+    <div id="upgrade-area">
+        <h2>稟議・決裁ルート構築</h2>
+        <div id="facilities-container">
+            <!-- JavaScriptでここに施設が生成されます -->
+        </div>
+    </div>
+
+    <script>
+        /* --- ゲームのロジック（JavaScript） --- */
+        
+        const D = Decimal;
+
+        // ゲームデータの初期値
+        let game = {
+            paper: new D(0),
+            facilities: [
+                { id: 0, name: "アルバイト", baseCost: 15, baseProd: 0.5, owned: 0, desc: "スマホ片手に作業します。" },
+                { id: 1, name: "自動捺印機", baseCost: 100, baseProd: 4, owned: 0, desc: "ガシャンガシャン。" },
+                { id: 2, name: "ベテラン社員", baseCost: 1100, baseProd: 22, owned: 0, desc: "残業は趣味です。" },
+                { id: 3, name: "クラウドワーカー", baseCost: 12000, baseProd: 85, owned: 0, desc: "顔の見えない労働力。" },
+                { id: 4, name: "承認AI Type-0", baseCost: 130000, baseProd: 350, owned: 0, desc: "空気を読んで承認します。" },
+                { id: 5, name: "書類養殖プラント", baseCost: 1400000, baseProd: 1800, owned: 0, desc: "バイオ技術で書類を栽培。" },
+            ],
+            startTime: Date.now() // セーブ用ではなく、開始時間記録用
+        };
+
+        // アニメーション用の時間管理変数
+        let lastFrameTime = Date.now(); 
+
+        // ロード処理
+        function loadGame() {
+            const saved = localStorage.getItem("mugenRingiSave");
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 数字データをDecimal型に復元
+                    game.paper = new D(parsed.paper);
+                    game.facilities.forEach((f, i) => {
+                        if (parsed.facilities[i]) {
+                            f.owned = parsed.facilities[i].owned;
+                        }
+                    });
+                } catch (e) {
+                    console.error("セーブデータの読み込みに失敗しました", e);
+                }
+            }
+            createFacilityUI();
+            
+            // ゲームループ開始前に時間をリセット（意図しない大量加算を防ぐ）
+            lastFrameTime = Date.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 画面（UI）の生成
+        function createFacilityUI() {
+            const container = document.getElementById("facilities-container");
+            container.innerHTML = ""; 
+
+            game.facilities.forEach((f, index) => {
+                const div = document.createElement("div");
+                div.className = "facility";
+                div.id = `fac-${index}`;
+                div.innerHTML = `
+                    <div class="facility-info">
+                        <h3>${f.name}</h3>
+                        <p>${f.desc}</p>
+                        <p>所持: <span id="owned-${index}" style="font-weight:bold;">0</span></p>
+                        <p>生産: +${f.baseProd}/秒</p>
+                    </div>
+                    <button class="buy-btn" id="btn-${index}" onclick="buyFacility(${index})">
+                        雇用<br>
+                        <span id="cost-${index}">0</span>枚
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // クリック時の処理
+        function clickStamp(event) {
+            const clickPower = new D(1);
+            game.paper = game.paper.plus(clickPower);
+            spawnFloatingText(event, "+" + formatNumber(clickPower));
+            updateDisplay();
+        }
+
+        // 施設購入処理
+        function buyFacility(index) {
+            const f = game.facilities[index];
+            const cost = getCost(f);
+            
+            if (game.paper.gte(cost)) {
+                game.paper = game.paper.minus(cost);
+                f.owned++;
+                updateDisplay();
+            }
+        }
+
+        // 価格計算
+        function getCost(facility) {
+            return new D(facility.baseCost).times(new D(1.15).pow(facility.owned));
+        }
+
+        // 数字の整形
+        function formatNumber(n) {
+            n = new D(n);
+            if (n.lt(1000)) return n.floor().toString();
+            return n.mantissa.toFixed(2) + "e" + n.exponent;
+        }
+
+        // 演出
+        function spawnFloatingText(e, text) {
+            const el = document.createElement("div");
+            el.className = "click-effect";
+            el.innerText = text;
+            let x = e.clientX;
+            let y = e.clientY;
+            if (!x || !y) {
+                const rect = document.getElementById("stamp-btn").getBoundingClientRect();
+                x = rect.left + rect.width / 2;
+                y = rect.top;
+            }
+            el.style.left = x + "px";
+            el.style.top = y + "px";
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        // ★修正したメインループ★
+        function gameLoop() {
+            const now = Date.now();
+            // 経過時間（秒）を計算。ここが重要です。
+            const dt = (now - lastFrameTime) / 1000; 
+            lastFrameTime = now;
+
+            // 生産計算
+            let cps = new D(0);
+            game.facilities.forEach(f => {
+                cps = cps.plus(new D(f.baseProd).times(f.owned));
+            });
+
+            if (dt > 0) {
+                // ★修正箇所：dt/10 を dt に変更しました
+                // これで「毎秒生産量 × 経過秒数」が正しく加算されます
+                game.paper = game.paper.plus(cps.times(dt)); 
+            }
+
+            // 画面更新
+            document.getElementById("counter").innerText = formatNumber(game.paper);
+            document.getElementById("cps-display").innerText = "毎秒処理: " + formatNumber(cps) + " 枚";
+
+            // ボタン制御
+            game.facilities.forEach((f, i) => {
+                const cost = getCost(f);
+                const btn = document.getElementById(`btn-${i}`);
+                document.getElementById(`owned-${i}`).innerText = f.owned;
+                document.getElementById(`cost-${i}`).innerText = formatNumber(cost);
+                
+                if (game.paper.gte(cost)) {
+                    btn.disabled = false;
+                } else {
+                    btn.disabled = true;
+                }
+            });
+
+            // オートセーブ（頻度調整済み）
+            if (Math.random() < 0.01) { // 頻度を下げました
+                saveGame();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function saveGame() {
+            const saveObj = {
+                paper: game.paper.toString(),
+                facilities: game.facilities.map(f => ({ owned: f.owned }))
+            };
+            localStorage.setItem("mugenRingiSave", JSON.stringify(saveObj));
+        }
+
+        // リセット時に画面も更新するように修正
+        function resetGame() {
+            if(confirm("本当に辞表を出しますか？（データが消えます）")) {
+                localStorage.removeItem("mugenRingiSave");
+                location.reload();
+            }
+        }
+        
+        // 画面更新用ショートカット
+        function updateDisplay() {
+            // ループ外で単発更新したいとき用（今はクリック時に使用）
+            document.getElementById("counter").innerText = formatNumber(game.paper);
+        }
+
+        // ゲーム起動
+        loadGame();
+
+    </script>
+</body>
+</html>
