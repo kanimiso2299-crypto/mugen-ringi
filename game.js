@@ -1,4 +1,4 @@
-/* --- 無限稟議 ゲームロジック (Ver 5.0) --- */
+/* --- 無限稟議 ゲームロジック (Ver 5.1: Achievements Expansion) --- */
 
 // 巨大数ライブラリのショートカット
 const D = Decimal;
@@ -38,25 +38,61 @@ let game = {
         { id: "click_1", name: "重厚なハンコ", cost: 500, targetId: -1, scale: 10, purchased: false, req: 1, desc: "クリック効率10倍" },
     ],
 
-    // 実績データ
+    // 実績データ（大幅拡張）
     achievements: [
+        // --- クリック・基本系 ---
         { id: "ach_1", name: "初めの一歩", desc: "ハンコを1回押す", unlocked: false, check: g => g.totalClicks >= 1 },
         { id: "ach_2", name: "腱鞘炎予備軍", desc: "ハンコを1,000回押す", unlocked: false, check: g => g.totalClicks >= 1000 },
+        { id: "ach_click_3", name: "指先の達人", desc: "ハンコを10,000回押す", unlocked: false, check: g => g.totalClicks >= 10000 },
+        
+        // --- 施設数（合計）系 ---
         { id: "ach_3", name: "小さなチーム", desc: "施設を合計10個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 10 },
         { id: "ach_4", name: "課の設立", desc: "施設を合計50個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 50 },
         { id: "ach_5", name: "ブラック企業", desc: "施設を合計100個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 100 },
+        { id: "ach_fac_4", name: "中堅企業", desc: "施設を合計200個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 200 },
+        { id: "ach_fac_5", name: "大企業", desc: "施設を合計300個持つ", unlocked: false, check: g => getTotalFacilities(g) >= 300 },
+
+        // --- 金額（累計枚数）系 ---
         { id: "ach_6", name: "100万円の壁", desc: "累計で1M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1000000) },
         { id: "ach_7", name: "億り人", desc: "累計で100M枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(100000000) },
         { id: "ach_8", name: "兆万長者", desc: "累計で1T枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e12) },
+        { id: "ach_money_4", name: "国家予算規模", desc: "累計で1Qa(1000兆)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e15) },
+        { id: "ach_money_5", name: "天文学的数字", desc: "累計で1Qi(100京)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e18) },
+        { id: "ach_money_6", name: "宇宙の塵", desc: "累計で1Sx(10垓)枚稼ぐ", unlocked: false, check: g => g.totalPaper.gte(1e21) },
+
+        // --- 特定施設（深掘り）系 ---
         { id: "ach_9", name: "バイトリーダー", desc: "アルバイトを50人雇う", unlocked: false, check: g => g.facilities[0].owned >= 50 },
-        { id: "ach_10", name: "自動化推進", desc: "捺印機を50台導入する", unlocked: false, check: g => g.facilities[1].owned >= 50 },
+        { id: "ach_part_2", name: "人海戦術", desc: "アルバイトを100人雇う", unlocked: false, check: g => g.facilities[0].owned >= 100 },
+        
+        { id: "ach_10", name: "自動化推進", desc: "自動捺印機を50台導入", unlocked: false, check: g => g.facilities[1].owned >= 50 },
+        { id: "ach_stamp_2", name: "産業革命", desc: "自動捺印機を100台導入", unlocked: false, check: g => g.facilities[1].owned >= 100 },
+
+        { id: "ach_vet_1", name: "歴戦の勇士", desc: "ベテラン社員を50人雇う", unlocked: false, check: g => g.facilities[2].owned >= 50 },
+        { id: "ach_vet_2", name: "社畜の鑑", desc: "ベテラン社員を100人雇う", unlocked: false, check: g => g.facilities[2].owned >= 100 },
+
+        { id: "ach_cloud_1", name: "サーバー負荷増大", desc: "クラウドワーカーを50人確保", unlocked: false, check: g => g.facilities[3].owned >= 50 },
+        { id: "ach_cloud_2", name: "分散処理ネットワーク", desc: "クラウドワーカーを100人確保", unlocked: false, check: g => g.facilities[3].owned >= 100 },
+
+        { id: "ach_ai_1", name: "シンギュラリティ", desc: "承認AIを50台稼働", unlocked: false, check: g => g.facilities[4].owned >= 50 },
+        { id: "ach_bio_1", name: "マッドサイエンティスト", desc: "書類養殖場を50箇所建設", unlocked: false, check: g => g.facilities[5].owned >= 50 },
+
+        // --- システム・転生系 ---
         { id: "ach_11", name: "効率厨", desc: "アップグレードを3つ購入", unlocked: false, check: g => g.upgrades.filter(u => u.purchased).length >= 3 },
+        { id: "ach_upg_2", name: "完全武装", desc: "アップグレードを6つ購入", unlocked: false, check: g => g.upgrades.filter(u => u.purchased).length >= 6 },
+        
         { id: "ach_12", name: "伝説の始まり", desc: "初めて栄転を行う", unlocked: false, check: g => g.prestigeCount >= 1 },
+        { id: "ach_pres_2", name: "転生中毒", desc: "栄転を3回行う", unlocked: false, check: g => g.prestigeCount >= 3 },
+        { id: "ach_pres_3", name: "輪廻の果て", desc: "栄転を5回行う", unlocked: false, check: g => g.prestigeCount >= 5 },
+        
+        // --- 秘密の実績（条件隠し） ---
+        { id: "ach_sec_1", name: "カチカチ山", desc: "【隠し】1秒間に10回以上クリックする", unlocked: false, check: g => clickRateCheck() },
     ]
 };
 
 // アニメーション管理変数
 let lastFrameTime = Date.now();
+// クリックレート計測用
+let clickTimestamps = [];
 
 /* --- 初期化とロード --- */
 function loadGame() {
@@ -242,6 +278,13 @@ function updateButtons() {
 /* --- アクション関数 --- */
 function clickStamp(event) {
     game.totalClicks++;
+    
+    // クリックレート計測（隠し実績用）
+    const now = Date.now();
+    clickTimestamps.push(now);
+    // 1秒以上前の履歴を消す
+    clickTimestamps = clickTimestamps.filter(t => now - t < 1000);
+
     let clickPower = new D(1);
 
     const unlockedCount = game.achievements.filter(a => a.unlocked).length;
@@ -256,6 +299,11 @@ function clickStamp(event) {
     game.paper = game.paper.plus(clickPower);
     game.totalPaper = game.totalPaper.plus(clickPower);
     spawnFloatingText(event, "+" + formatNumber(clickPower));
+}
+
+// 隠し実績チェック関数
+function clickRateCheck() {
+    return clickTimestamps.length >= 10; // 1秒間に10回クリック
 }
 
 function buyFacility(index) {
@@ -404,7 +452,6 @@ function saveGame() {
 function exportSave() {
     saveGame();
     const saved = localStorage.getItem("mugenRingiSave");
-    // Base64に変換して少し見づらくする（簡易的なコピー対策にもなる）
     const encoded = btoa(saved);
     prompt("以下のテキストをコピーして保存してください", encoded);
 }
@@ -414,7 +461,6 @@ function importSave() {
     if (encoded) {
         try {
             const decoded = atob(encoded);
-            // 正しいJSONかチェック
             JSON.parse(decoded);
             localStorage.setItem("mugenRingiSave", decoded);
             location.reload();
